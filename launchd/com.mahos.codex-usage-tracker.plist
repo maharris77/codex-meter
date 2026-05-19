@@ -8,13 +8,13 @@
   <key>ProgramArguments</key>
   <array>
     <string>/opt/homebrew/bin/python3</string>
-    <string>/Users/m/Documents/Codex/2026-05-19/i-d-like-a-little-codex/scripts/collect_codex_usage.py</string>
+    <string>/Users/m/code/github.com/maharris77/codex-usage-tracker/scripts/collect_codex_usage.py</string>
   </array>
   <key>RunAtLoad</key>
   <true/>
   <key>StartInterval</key>
   <integer>1800</integer>
   <key>WorkingDirectory</key>
-  <string>/Users/m/Documents/Codex/2026-05-19/i-d-like-a-little-codex</string>
+  <string>/Users/m/code/github.com/maharris77/codex-usage-tracker</string>
 </dict>
 </plist>

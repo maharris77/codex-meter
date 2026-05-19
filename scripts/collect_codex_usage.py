@@ -14,8 +14,7 @@ from pathlib import Path
 from typing import Any
 
 
-REPO_ROOT = Path(__file__).resolve().parents[1]
-OUTPUT_DIR = REPO_ROOT / "var" / "codex-usage"
+OUTPUT_DIR = Path("/Users/m/Documents/Archives/Codex Usage Tracker")
 SNAPSHOTS_PATH = OUTPUT_DIR / "snapshots.jsonl"
 LATEST_PATH = OUTPUT_DIR / "latest.json"
 SVG_PATH = OUTPUT_DIR / "usage.svg"
