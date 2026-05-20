@@ -28,9 +28,8 @@ over the dots to see the model, window, collection time, and percent used.
 - Tested on Codex.app `26.513.31313` and `codex-cli 0.130.0`.
 - Tracks the response returned by `account/rateLimits/read`; it is not official
   OpenAI analytics or billing history.
-- The generated data includes plan type, usage percentages, credit state, and
-  exact reset timestamps. Keep raw generated output out of git unless you
-  deliberately publish an example graph.
+- The generated snapshots and latest-state JSON are local output. The
+  checked-in `docs/example-usage.svg` is an intentional example graph.
 
 ## Requirements
 
