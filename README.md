@@ -9,7 +9,8 @@ python3 scripts/collect_codex_usage.py
 ```
 
 That command starts `codex app-server --listen stdio://`, calls
-`account/rateLimits/read`, appends a snapshot, and renders a local SVG graph.
+`account/rateLimits/read`, appends a snapshot, and renders a local SVG graph
+with hover tooltips on each plotted point.
 
 The scheduled path is the LaunchAgent in
 `launchd/com.mahos.codex-usage-tracker.plist`. It runs the same collector every

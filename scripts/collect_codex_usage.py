@@ -206,6 +206,12 @@ def svg_y(percent: float, top: int, height: int) -> float:
     return top + (100 - max(0, min(100, percent))) / 100 * height
 
 
+def format_percent(percent: float) -> str:
+    if percent.is_integer():
+        return f"{int(percent)}%"
+    return f"{percent:.1f}%"
+
+
 def render_svg(snapshots: list[dict[str, Any]]) -> None:
     width = 1100
     height = 560
@@ -235,6 +241,8 @@ def render_svg(snapshots: list[dict[str, Any]]) -> None:
         '<svg xmlns="http://www.w3.org/2000/svg" '
         f'width="{width}" height="{height}" viewBox="0 0 {width} {height}">',
         '<rect width="100%" height="100%" fill="#f8fafc"/>',
+        '<style>.usage-point{cursor:crosshair}.usage-point:hover{stroke:#0f172a;'
+        'stroke-width:2}</style>',
         '<text x="32" y="34" font-family="system-ui, -apple-system, sans-serif" '
         'font-size="22" font-weight="700" fill="#0f172a">Codex usage limits</text>',
         '<text x="32" y="58" font-family="system-ui, -apple-system, sans-serif" '
@@ -271,6 +279,8 @@ def render_svg(snapshots: list[dict[str, Any]]) -> None:
         color = palette[index % len(palette)]
         coordinates = [
             (
+                timestamp,
+                percent,
                 svg_x(timestamp, first, last, left, plot_width),
                 svg_y(percent, top, plot_height),
             )
@@ -279,14 +289,21 @@ def render_svg(snapshots: list[dict[str, Any]]) -> None:
         if len(coordinates) > 1:
             path_data = " ".join(
                 f"{'M' if point_index == 0 else 'L'} {x:.2f} {y:.2f}"
-                for point_index, (x, y) in enumerate(coordinates)
+                for point_index, (_, _, x, y) in enumerate(coordinates)
             )
             parts.append(
                 f'<path d="{path_data}" fill="none" stroke="{color}" '
                 'stroke-width="2.5"/>'
             )
-        for x, y in coordinates:
-            parts.append(f'<circle cx="{x:.2f}" cy="{y:.2f}" r="4" fill="{color}"/>')
+        for timestamp, percent, x, y in coordinates:
+            title = (
+                f"{label} - {format_epoch_local(timestamp)} - "
+                f"{format_percent(percent)} used"
+            )
+            parts.append(
+                f'<circle class="usage-point" cx="{x:.2f}" cy="{y:.2f}" r="4" '
+                f'fill="{color}"><title>{html.escape(title)}</title></circle>'
+            )
 
         legend_y = top + 18 + index * 24
         parts.append(
