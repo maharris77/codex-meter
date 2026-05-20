@@ -14,12 +14,16 @@ from pathlib import Path
 from typing import Any
 
 
-OUTPUT_DIR = Path("/Users/m/Documents/Archives/Codex Usage Tracker")
+OUTPUT_DIR = Path.home() / "Documents" / "Archives" / "Codex Usage Tracker"
 SNAPSHOTS_PATH = OUTPUT_DIR / "snapshots.jsonl"
 LATEST_PATH = OUTPUT_DIR / "latest.json"
 SVG_PATH = OUTPUT_DIR / "usage.svg"
 READ_TIMEOUT_SECONDS = 30
 CODEX_BIN = "/opt/homebrew/bin/codex"
+WINDOW_LABELS_BY_DURATION_MINS = {
+    300: "5-hour window",
+    10080: "7-day window",
+}
 
 
 def utc_now() -> datetime:
@@ -171,9 +175,14 @@ def limit_snapshots(result: dict[str, Any]) -> dict[str, Any]:
     return by_limit_id
 
 
-def series_label(limit_id: str, limit_snapshot: dict[str, Any], window_name: str) -> str:
+def window_label(window: dict[str, Any]) -> str:
+    duration_minutes = int(window["windowDurationMins"])
+    return WINDOW_LABELS_BY_DURATION_MINS[duration_minutes]
+
+
+def series_label(limit_id: str, limit_snapshot: dict[str, Any], window: dict[str, Any]) -> str:
     limit_name = limit_snapshot.get("limitName") or limit_id
-    return f"{limit_name} {window_name}"
+    return f"{limit_name} {window_label(window)}"
 
 
 def collect_series(
@@ -191,7 +200,7 @@ def collect_series(
                     continue
                 used_percent = window.get("usedPercent")
                 if isinstance(used_percent, (int, float)):
-                    label = series_label(limit_id, limit_snapshot, window_name)
+                    label = series_label(limit_id, limit_snapshot, window)
                     series[label].append((collected_at, float(used_percent)))
     return dict(series)
 
@@ -334,10 +343,9 @@ def summary_lines(result: dict[str, Any]) -> list[str]:
                 continue
             used_percent = window.get("usedPercent")
             reset = format_epoch_local(window.get("resetsAt"))
-            duration = window.get("windowDurationMins")
+            label = window_label(window)
             lines.append(
-                f"{limit_name} {window_name}: {used_percent}% used; "
-                f"resets {reset}; window {duration} min"
+                f"{limit_name} {label}: {used_percent}% used; resets {reset}"
             )
     return lines
 
