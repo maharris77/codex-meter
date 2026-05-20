@@ -63,7 +63,7 @@ Hover directly over the plotted dots for the point details.
 
 ## Run On Startup
 
-The included LaunchAgent runs the collector every 30 minutes:
+The included LaunchAgent runs the collector every 5 minutes:
 
 ```sh
 launchd/com.mahos.codex-usage-tracker.plist
@@ -94,6 +94,6 @@ launchctl bootout "gui/$UID" \
 ## Repository Contents
 
 - `scripts/collect_codex_usage.py`: the collector and SVG renderer.
-- `launchd/com.mahos.codex-usage-tracker.plist`: the 30-minute LaunchAgent.
+- `launchd/com.mahos.codex-usage-tracker.plist`: the 5-minute LaunchAgent.
 - `docs/example-usage.svg`: static example output for the README.
 - `docs/research.md`: notes on the data source and related projects.
