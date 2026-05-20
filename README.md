@@ -28,8 +28,8 @@ over the dots to see the model, window, collection time, and percent used.
 - Tested on Codex.app `26.513.31313` and `codex-cli 0.130.0`.
 - Tracks the response returned by `account/rateLimits/read`; it is not official
   OpenAI analytics or billing history.
-- The generated snapshots and latest-state JSON are local output. The
-  checked-in `docs/example-usage.svg` is an intentional example graph.
+- The local JSON files include plan type, usage percentages, credit state, and
+  exact reset timestamps.
 
 ## Requirements
 
@@ -94,5 +94,5 @@ launchctl bootout "gui/$UID" \
 
 - `scripts/collect_codex_usage.py`: the collector and SVG renderer.
 - `launchd/com.mahos.codex-usage-tracker.plist`: the 5-minute LaunchAgent.
-- `docs/example-usage.svg`: real example graph output for the README.
+- `docs/example-usage.svg`: example graph shown in this README.
 - `docs/research.md`: notes on the data source and related projects.
