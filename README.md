@@ -21,8 +21,9 @@ Tested on:
 
 This is an unofficial local utility. It calls a local Codex app-server method
 that may change, move, or disappear in future Codex releases. It records your
-own local usage-limit snapshots, so review the generated files before sharing
-them.
+own local usage-limit snapshots, including the raw app-server rate-limit result
+with plan type, credit state, limit IDs, window lengths, reset timestamps, and
+used percentages. Review generated files before sharing them.
 
 ## Requirements
 
@@ -67,6 +68,23 @@ python3 scripts/install_launch_agent.py
 
 The installer writes `~/Library/LaunchAgents/com.codex-usage-tracker.plist`,
 loads it with `launchctl`, and starts the same collector every 30 minutes.
+
+Install from the checkout location you plan to keep. The LaunchAgent stores
+absolute paths to the current Python executable, checkout directory, and
+collector script; rerun the installer after moving the repo or changing Python.
+
+Inspect the installed LaunchAgent:
+
+```sh
+launchctl print "gui/$(id -u)/com.codex-usage-tracker"
+```
+
+Uninstall it:
+
+```sh
+launchctl bootout "gui/$(id -u)" "$HOME/Library/LaunchAgents/com.codex-usage-tracker.plist"
+rm "$HOME/Library/LaunchAgents/com.codex-usage-tracker.plist"
+```
 
 ## License
 
