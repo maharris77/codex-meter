@@ -29,8 +29,8 @@ over the dots to see the model, window, collection time, and percent used.
 - Tracks the response returned by `account/rateLimits/read`; it is not official
   OpenAI analytics or billing history.
 - The generated data includes plan type, usage percentages, credit state, and
-  exact reset timestamps. Keep generated output out of git unless you
-  deliberately publish a redacted example.
+  exact reset timestamps. Keep raw generated output out of git unless you
+  deliberately publish an example graph.
 
 ## Requirements
 
@@ -95,5 +95,5 @@ launchctl bootout "gui/$UID" \
 
 - `scripts/collect_codex_usage.py`: the collector and SVG renderer.
 - `launchd/com.mahos.codex-usage-tracker.plist`: the 5-minute LaunchAgent.
-- `docs/example-usage.svg`: static example output for the README.
+- `docs/example-usage.svg`: real example graph output for the README.
 - `docs/research.md`: notes on the data source and related projects.

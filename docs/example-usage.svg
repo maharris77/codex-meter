@@ -1,103 +1,267 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="1100" height="560" viewBox="0 0 1100 560">
-  <rect width="100%" height="100%" fill="#f8fafc"/>
-  <style>
-    .usage-point{cursor:crosshair}
-    .usage-point:hover{stroke:#0f172a;stroke-width:2}
-    text{font-family:system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}
-  </style>
-  <text x="32" y="34" font-size="22" font-weight="700" fill="#0f172a">Codex usage limits</text>
-  <text x="32" y="58" font-size="13" fill="#475569">Example data at the 5-minute LaunchAgent cadence, not live account usage</text>
-  <rect x="78" y="72" width="772" height="402" fill="#ffffff" stroke="#cbd5e1"/>
-
-  <line x1="78" y1="474" x2="850" y2="474" stroke="#e2e8f0"/>
-  <line x1="78" y1="373.5" x2="850" y2="373.5" stroke="#e2e8f0"/>
-  <line x1="78" y1="273" x2="850" y2="273" stroke="#e2e8f0"/>
-  <line x1="78" y1="172.5" x2="850" y2="172.5" stroke="#e2e8f0"/>
-  <line x1="78" y1="72" x2="850" y2="72" stroke="#e2e8f0"/>
-  <text x="66" y="478" text-anchor="end" font-size="12" fill="#475569">0%</text>
-  <text x="66" y="377.5" text-anchor="end" font-size="12" fill="#475569">25%</text>
-  <text x="66" y="277" text-anchor="end" font-size="12" fill="#475569">50%</text>
-  <text x="66" y="176.5" text-anchor="end" font-size="12" fill="#475569">75%</text>
-  <text x="66" y="76" text-anchor="end" font-size="12" fill="#475569">100%</text>
-
-  <line x1="78" y1="72" x2="78" y2="474" stroke="#cbd5e1" stroke-width="1" stroke-dasharray="4 6"/>
-  <line x1="271" y1="72" x2="271" y2="474" stroke="#cbd5e1" stroke-width="1" stroke-dasharray="4 6"/>
-  <line x1="464" y1="72" x2="464" y2="474" stroke="#cbd5e1" stroke-width="1" stroke-dasharray="4 6"/>
-  <line x1="657" y1="72" x2="657" y2="474" stroke="#cbd5e1" stroke-width="1" stroke-dasharray="4 6"/>
-  <line x1="850" y1="72" x2="850" y2="474" stroke="#cbd5e1" stroke-width="1" stroke-dasharray="4 6"/>
-
-  <text x="78" y="524" font-size="12" fill="#475569">09:00</text>
-  <text x="271" y="524" text-anchor="middle" font-size="12" fill="#475569">09:15</text>
-  <text x="464" y="524" text-anchor="middle" font-size="12" fill="#475569">09:30</text>
-  <text x="657" y="524" text-anchor="middle" font-size="12" fill="#475569">09:45</text>
-  <text x="850" y="524" text-anchor="end" font-size="12" fill="#475569">10:00</text>
-
-  <path d="M 78 413.7 L 142.33 409.7 L 206.67 401.6 L 271 389.6 L 335.33 377.5 L 399.67 365.5 L 464 349.4 L 528.33 337.3 L 592.67 325.3 L 657 317.2 L 721.33 309.2 L 785.67 297.1 L 850 285.1" fill="none" stroke="#2563eb" stroke-width="2.5"/>
-  <circle class="usage-point" cx="78" cy="413.7" r="4" fill="#2563eb"><title>GPT-5.3-Codex 5-hour window - 09:00 - 15% used</title></circle>
-  <circle class="usage-point" cx="142.33" cy="409.7" r="4" fill="#2563eb"><title>GPT-5.3-Codex 5-hour window - 09:05 - 16% used</title></circle>
-  <circle class="usage-point" cx="206.67" cy="401.6" r="4" fill="#2563eb"><title>GPT-5.3-Codex 5-hour window - 09:10 - 18% used</title></circle>
-  <circle class="usage-point" cx="271" cy="389.6" r="4" fill="#2563eb"><title>GPT-5.3-Codex 5-hour window - 09:15 - 21% used</title></circle>
-  <circle class="usage-point" cx="335.33" cy="377.5" r="4" fill="#2563eb"><title>GPT-5.3-Codex 5-hour window - 09:20 - 24% used</title></circle>
-  <circle class="usage-point" cx="399.67" cy="365.5" r="4" fill="#2563eb"><title>GPT-5.3-Codex 5-hour window - 09:25 - 27% used</title></circle>
-  <circle class="usage-point" cx="464" cy="349.4" r="4" fill="#2563eb"><title>GPT-5.3-Codex 5-hour window - 09:30 - 31% used</title></circle>
-  <circle class="usage-point" cx="528.33" cy="337.3" r="4" fill="#2563eb"><title>GPT-5.3-Codex 5-hour window - 09:35 - 34% used</title></circle>
-  <circle class="usage-point" cx="592.67" cy="325.3" r="4" fill="#2563eb"><title>GPT-5.3-Codex 5-hour window - 09:40 - 37% used</title></circle>
-  <circle class="usage-point" cx="657" cy="317.2" r="4" fill="#2563eb"><title>GPT-5.3-Codex 5-hour window - 09:45 - 39% used</title></circle>
-  <circle class="usage-point" cx="721.33" cy="309.2" r="4" fill="#2563eb"><title>GPT-5.3-Codex 5-hour window - 09:50 - 41% used</title></circle>
-  <circle class="usage-point" cx="785.67" cy="297.1" r="4" fill="#2563eb"><title>GPT-5.3-Codex 5-hour window - 09:55 - 44% used</title></circle>
-  <circle class="usage-point" cx="850" cy="285.1" r="4" fill="#2563eb"><title>GPT-5.3-Codex 5-hour window - 10:00 - 47% used</title></circle>
-
-  <path d="M 78 365.5 L 142.33 365.5 L 206.67 361.4 L 271 361.4 L 335.33 357.4 L 399.67 357.4 L 464 353.4 L 528.33 349.4 L 592.67 349.4 L 657 345.4 L 721.33 345.4 L 785.67 341.3 L 850 337.3" fill="none" stroke="#dc2626" stroke-width="2.5"/>
-  <circle class="usage-point" cx="78" cy="365.5" r="4" fill="#dc2626"><title>GPT-5.3-Codex 7-day window - 09:00 - 27% used</title></circle>
-  <circle class="usage-point" cx="142.33" cy="365.5" r="4" fill="#dc2626"><title>GPT-5.3-Codex 7-day window - 09:05 - 27% used</title></circle>
-  <circle class="usage-point" cx="206.67" cy="361.4" r="4" fill="#dc2626"><title>GPT-5.3-Codex 7-day window - 09:10 - 28% used</title></circle>
-  <circle class="usage-point" cx="271" cy="361.4" r="4" fill="#dc2626"><title>GPT-5.3-Codex 7-day window - 09:15 - 28% used</title></circle>
-  <circle class="usage-point" cx="335.33" cy="357.4" r="4" fill="#dc2626"><title>GPT-5.3-Codex 7-day window - 09:20 - 29% used</title></circle>
-  <circle class="usage-point" cx="399.67" cy="357.4" r="4" fill="#dc2626"><title>GPT-5.3-Codex 7-day window - 09:25 - 29% used</title></circle>
-  <circle class="usage-point" cx="464" cy="353.4" r="4" fill="#dc2626"><title>GPT-5.3-Codex 7-day window - 09:30 - 30% used</title></circle>
-  <circle class="usage-point" cx="528.33" cy="349.4" r="4" fill="#dc2626"><title>GPT-5.3-Codex 7-day window - 09:35 - 31% used</title></circle>
-  <circle class="usage-point" cx="592.67" cy="349.4" r="4" fill="#dc2626"><title>GPT-5.3-Codex 7-day window - 09:40 - 31% used</title></circle>
-  <circle class="usage-point" cx="657" cy="345.4" r="4" fill="#dc2626"><title>GPT-5.3-Codex 7-day window - 09:45 - 32% used</title></circle>
-  <circle class="usage-point" cx="721.33" cy="345.4" r="4" fill="#dc2626"><title>GPT-5.3-Codex 7-day window - 09:50 - 32% used</title></circle>
-  <circle class="usage-point" cx="785.67" cy="341.3" r="4" fill="#dc2626"><title>GPT-5.3-Codex 7-day window - 09:55 - 33% used</title></circle>
-  <circle class="usage-point" cx="850" cy="337.3" r="4" fill="#dc2626"><title>GPT-5.3-Codex 7-day window - 10:00 - 34% used</title></circle>
-
-  <path d="M 78 470 L 142.33 470 L 206.67 470 L 271 466 L 335.33 466 L 399.67 466 L 464 462 L 528.33 462 L 592.67 462 L 657 458 L 721.33 458 L 785.67 458 L 850 454" fill="none" stroke="#16a34a" stroke-width="2.5"/>
-  <circle class="usage-point" cx="78" cy="470" r="4" fill="#16a34a"><title>GPT-5.3-Codex-Spark 5-hour window - 09:00 - 1% used</title></circle>
-  <circle class="usage-point" cx="142.33" cy="470" r="4" fill="#16a34a"><title>GPT-5.3-Codex-Spark 5-hour window - 09:05 - 1% used</title></circle>
-  <circle class="usage-point" cx="206.67" cy="470" r="4" fill="#16a34a"><title>GPT-5.3-Codex-Spark 5-hour window - 09:10 - 1% used</title></circle>
-  <circle class="usage-point" cx="271" cy="466" r="4" fill="#16a34a"><title>GPT-5.3-Codex-Spark 5-hour window - 09:15 - 2% used</title></circle>
-  <circle class="usage-point" cx="335.33" cy="466" r="4" fill="#16a34a"><title>GPT-5.3-Codex-Spark 5-hour window - 09:20 - 2% used</title></circle>
-  <circle class="usage-point" cx="399.67" cy="466" r="4" fill="#16a34a"><title>GPT-5.3-Codex-Spark 5-hour window - 09:25 - 2% used</title></circle>
-  <circle class="usage-point" cx="464" cy="462" r="4" fill="#16a34a"><title>GPT-5.3-Codex-Spark 5-hour window - 09:30 - 3% used</title></circle>
-  <circle class="usage-point" cx="528.33" cy="462" r="4" fill="#16a34a"><title>GPT-5.3-Codex-Spark 5-hour window - 09:35 - 3% used</title></circle>
-  <circle class="usage-point" cx="592.67" cy="462" r="4" fill="#16a34a"><title>GPT-5.3-Codex-Spark 5-hour window - 09:40 - 3% used</title></circle>
-  <circle class="usage-point" cx="657" cy="458" r="4" fill="#16a34a"><title>GPT-5.3-Codex-Spark 5-hour window - 09:45 - 4% used</title></circle>
-  <circle class="usage-point" cx="721.33" cy="458" r="4" fill="#16a34a"><title>GPT-5.3-Codex-Spark 5-hour window - 09:50 - 4% used</title></circle>
-  <circle class="usage-point" cx="785.67" cy="458" r="4" fill="#16a34a"><title>GPT-5.3-Codex-Spark 5-hour window - 09:55 - 4% used</title></circle>
-  <circle class="usage-point" cx="850" cy="454" r="4" fill="#16a34a"><title>GPT-5.3-Codex-Spark 5-hour window - 10:00 - 5% used</title></circle>
-
-  <path d="M 78 450 L 142.33 450 L 206.67 450 L 271 450 L 335.33 446 L 399.67 446 L 464 446 L 528.33 446 L 592.67 442 L 657 442 L 721.33 442 L 785.67 442 L 850 438" fill="none" stroke="#9333ea" stroke-width="2.5"/>
-  <circle class="usage-point" cx="78" cy="450" r="4" fill="#9333ea"><title>GPT-5.3-Codex-Spark 7-day window - 09:00 - 6% used</title></circle>
-  <circle class="usage-point" cx="142.33" cy="450" r="4" fill="#9333ea"><title>GPT-5.3-Codex-Spark 7-day window - 09:05 - 6% used</title></circle>
-  <circle class="usage-point" cx="206.67" cy="450" r="4" fill="#9333ea"><title>GPT-5.3-Codex-Spark 7-day window - 09:10 - 6% used</title></circle>
-  <circle class="usage-point" cx="271" cy="450" r="4" fill="#9333ea"><title>GPT-5.3-Codex-Spark 7-day window - 09:15 - 6% used</title></circle>
-  <circle class="usage-point" cx="335.33" cy="446" r="4" fill="#9333ea"><title>GPT-5.3-Codex-Spark 7-day window - 09:20 - 7% used</title></circle>
-  <circle class="usage-point" cx="399.67" cy="446" r="4" fill="#9333ea"><title>GPT-5.3-Codex-Spark 7-day window - 09:25 - 7% used</title></circle>
-  <circle class="usage-point" cx="464" cy="446" r="4" fill="#9333ea"><title>GPT-5.3-Codex-Spark 7-day window - 09:30 - 7% used</title></circle>
-  <circle class="usage-point" cx="528.33" cy="446" r="4" fill="#9333ea"><title>GPT-5.3-Codex-Spark 7-day window - 09:35 - 7% used</title></circle>
-  <circle class="usage-point" cx="592.67" cy="442" r="4" fill="#9333ea"><title>GPT-5.3-Codex-Spark 7-day window - 09:40 - 8% used</title></circle>
-  <circle class="usage-point" cx="657" cy="442" r="4" fill="#9333ea"><title>GPT-5.3-Codex-Spark 7-day window - 09:45 - 8% used</title></circle>
-  <circle class="usage-point" cx="721.33" cy="442" r="4" fill="#9333ea"><title>GPT-5.3-Codex-Spark 7-day window - 09:50 - 8% used</title></circle>
-  <circle class="usage-point" cx="785.67" cy="442" r="4" fill="#9333ea"><title>GPT-5.3-Codex-Spark 7-day window - 09:55 - 8% used</title></circle>
-  <circle class="usage-point" cx="850" cy="438" r="4" fill="#9333ea"><title>GPT-5.3-Codex-Spark 7-day window - 10:00 - 9% used</title></circle>
-
-  <line x1="878" y1="86" x2="898" y2="86" stroke="#2563eb" stroke-width="3"/>
-  <text x="906" y="90" font-size="12" fill="#0f172a">GPT-5.3-Codex 5-hour window</text>
-  <line x1="878" y1="110" x2="898" y2="110" stroke="#dc2626" stroke-width="3"/>
-  <text x="906" y="114" font-size="12" fill="#0f172a">GPT-5.3-Codex 7-day window</text>
-  <line x1="878" y1="134" x2="898" y2="134" stroke="#16a34a" stroke-width="3"/>
-  <text x="906" y="138" font-size="12" fill="#0f172a">Spark 5-hour window</text>
-  <line x1="878" y1="158" x2="898" y2="158" stroke="#9333ea" stroke-width="3"/>
-  <text x="906" y="162" font-size="12" fill="#0f172a">Spark 7-day window</text>
+<rect width="100%" height="100%" fill="#f8fafc"/>
+<style>.usage-point{cursor:crosshair}.usage-point:hover{stroke:#0f172a;stroke-width:2}</style>
+<text x="32" y="34" font-family="system-ui, -apple-system, sans-serif" font-size="22" font-weight="700" fill="#0f172a">Codex usage limits</text>
+<text x="32" y="58" font-family="system-ui, -apple-system, sans-serif" font-size="13" fill="#475569">Last collected 2026-05-20T21:44:16Z</text>
+<rect x="78" y="72" width="772" height="402" fill="#ffffff" stroke="#cbd5e1"/>
+<line x1="78" y1="474.00" x2="850" y2="474.00" stroke="#e2e8f0"/>
+<text x="66" y="478.00" text-anchor="end" font-family="system-ui, -apple-system, sans-serif" font-size="12" fill="#475569">0%</text>
+<line x1="78" y1="373.50" x2="850" y2="373.50" stroke="#e2e8f0"/>
+<text x="66" y="377.50" text-anchor="end" font-family="system-ui, -apple-system, sans-serif" font-size="12" fill="#475569">25%</text>
+<line x1="78" y1="273.00" x2="850" y2="273.00" stroke="#e2e8f0"/>
+<text x="66" y="277.00" text-anchor="end" font-family="system-ui, -apple-system, sans-serif" font-size="12" fill="#475569">50%</text>
+<line x1="78" y1="172.50" x2="850" y2="172.50" stroke="#e2e8f0"/>
+<text x="66" y="176.50" text-anchor="end" font-family="system-ui, -apple-system, sans-serif" font-size="12" fill="#475569">75%</text>
+<line x1="78" y1="72.00" x2="850" y2="72.00" stroke="#e2e8f0"/>
+<text x="66" y="76.00" text-anchor="end" font-family="system-ui, -apple-system, sans-serif" font-size="12" fill="#475569">100%</text>
+<text x="78" y="524" font-family="system-ui, -apple-system, sans-serif" font-size="12" fill="#475569">2026-05-19 18:03:04 EDT</text>
+<text x="850" y="524" text-anchor="end" font-family="system-ui, -apple-system, sans-serif" font-size="12" fill="#475569">2026-05-20 17:44:16 EDT</text>
+<path d="M 78.00 297.12 L 78.41 297.12 L 79.39 293.10 L 79.77 293.10 L 96.07 248.88 L 102.79 228.78 L 103.17 224.76 L 119.46 180.54 L 135.77 465.96 L 152.07 449.88 L 168.38 421.74 L 184.69 413.70 L 201.01 413.70 L 217.31 401.64 L 233.62 389.58 L 249.92 369.48 L 266.23 357.42 L 282.52 337.32 L 298.83 449.88 L 304.13 425.76 L 315.14 401.64 L 331.43 393.60 L 347.74 365.46 L 364.04 349.38 L 380.34 313.20 L 396.64 260.94 L 412.95 224.76 L 429.27 172.50 L 445.59 148.38 L 461.89 461.94 L 478.20 441.84 L 494.49 413.70 L 510.80 381.54 L 527.10 353.40 L 543.41 345.36 L 559.73 329.28 L 576.04 297.12 L 592.35 285.06 L 608.65 277.02 L 624.95 457.92 L 641.26 441.84 L 657.56 421.74 L 673.86 409.68 L 690.16 389.58 L 706.47 349.38 L 722.77 329.28 L 739.08 273.00 L 751.21 260.94 L 755.38 248.88 L 771.69 212.70 L 787.99 461.94 L 804.30 409.68 L 810.04 373.50 L 810.66 373.50 L 814.37 357.42 L 821.21 341.34 L 826.99 333.30 L 843.28 317.22 L 850.00 309.18" fill="none" stroke="#2563eb" stroke-width="2.5"/>
+<circle class="usage-point" cx="78.00" cy="297.12" r="4" fill="#2563eb"><title>Codex 5-hour window - 2026-05-19 18:03:04 EDT - 44% used</title></circle>
+<circle class="usage-point" cx="78.41" cy="297.12" r="4" fill="#2563eb"><title>Codex 5-hour window - 2026-05-19 18:03:49 EDT - 44% used</title></circle>
+<circle class="usage-point" cx="79.39" cy="293.10" r="4" fill="#2563eb"><title>Codex 5-hour window - 2026-05-19 18:05:37 EDT - 45% used</title></circle>
+<circle class="usage-point" cx="79.77" cy="293.10" r="4" fill="#2563eb"><title>Codex 5-hour window - 2026-05-19 18:06:19 EDT - 45% used</title></circle>
+<circle class="usage-point" cx="96.07" cy="248.88" r="4" fill="#2563eb"><title>Codex 5-hour window - 2026-05-19 18:36:20 EDT - 56% used</title></circle>
+<circle class="usage-point" cx="102.79" cy="228.78" r="4" fill="#2563eb"><title>Codex 5-hour window - 2026-05-19 18:48:42 EDT - 61% used</title></circle>
+<circle class="usage-point" cx="103.17" cy="224.76" r="4" fill="#2563eb"><title>Codex 5-hour window - 2026-05-19 18:49:24 EDT - 62% used</title></circle>
+<circle class="usage-point" cx="119.46" cy="180.54" r="4" fill="#2563eb"><title>Codex 5-hour window - 2026-05-19 19:19:24 EDT - 73% used</title></circle>
+<circle class="usage-point" cx="135.77" cy="465.96" r="4" fill="#2563eb"><title>Codex 5-hour window - 2026-05-19 19:49:25 EDT - 2% used</title></circle>
+<circle class="usage-point" cx="152.07" cy="449.88" r="4" fill="#2563eb"><title>Codex 5-hour window - 2026-05-19 20:19:26 EDT - 6% used</title></circle>
+<circle class="usage-point" cx="168.38" cy="421.74" r="4" fill="#2563eb"><title>Codex 5-hour window - 2026-05-19 20:49:27 EDT - 13% used</title></circle>
+<circle class="usage-point" cx="184.69" cy="413.70" r="4" fill="#2563eb"><title>Codex 5-hour window - 2026-05-19 21:19:29 EDT - 15% used</title></circle>
+<circle class="usage-point" cx="201.01" cy="413.70" r="4" fill="#2563eb"><title>Codex 5-hour window - 2026-05-19 21:49:31 EDT - 15% used</title></circle>
+<circle class="usage-point" cx="217.31" cy="401.64" r="4" fill="#2563eb"><title>Codex 5-hour window - 2026-05-19 22:19:32 EDT - 18% used</title></circle>
+<circle class="usage-point" cx="233.62" cy="389.58" r="4" fill="#2563eb"><title>Codex 5-hour window - 2026-05-19 22:49:33 EDT - 21% used</title></circle>
+<circle class="usage-point" cx="249.92" cy="369.48" r="4" fill="#2563eb"><title>Codex 5-hour window - 2026-05-19 23:19:34 EDT - 26% used</title></circle>
+<circle class="usage-point" cx="266.23" cy="357.42" r="4" fill="#2563eb"><title>Codex 5-hour window - 2026-05-19 23:49:35 EDT - 29% used</title></circle>
+<circle class="usage-point" cx="282.52" cy="337.32" r="4" fill="#2563eb"><title>Codex 5-hour window - 2026-05-20 00:19:35 EDT - 34% used</title></circle>
+<circle class="usage-point" cx="298.83" cy="449.88" r="4" fill="#2563eb"><title>Codex 5-hour window - 2026-05-20 00:49:36 EDT - 6% used</title></circle>
+<circle class="usage-point" cx="304.13" cy="425.76" r="4" fill="#2563eb"><title>Codex 5-hour window - 2026-05-20 00:59:21 EDT - 12% used</title></circle>
+<circle class="usage-point" cx="315.14" cy="401.64" r="4" fill="#2563eb"><title>Codex 5-hour window - 2026-05-20 01:19:37 EDT - 18% used</title></circle>
+<circle class="usage-point" cx="331.43" cy="393.60" r="4" fill="#2563eb"><title>Codex 5-hour window - 2026-05-20 01:49:37 EDT - 20% used</title></circle>
+<circle class="usage-point" cx="347.74" cy="365.46" r="4" fill="#2563eb"><title>Codex 5-hour window - 2026-05-20 02:19:38 EDT - 27% used</title></circle>
+<circle class="usage-point" cx="364.04" cy="349.38" r="4" fill="#2563eb"><title>Codex 5-hour window - 2026-05-20 02:49:39 EDT - 31% used</title></circle>
+<circle class="usage-point" cx="380.34" cy="313.20" r="4" fill="#2563eb"><title>Codex 5-hour window - 2026-05-20 03:19:39 EDT - 40% used</title></circle>
+<circle class="usage-point" cx="396.64" cy="260.94" r="4" fill="#2563eb"><title>Codex 5-hour window - 2026-05-20 03:49:40 EDT - 53% used</title></circle>
+<circle class="usage-point" cx="412.95" cy="224.76" r="4" fill="#2563eb"><title>Codex 5-hour window - 2026-05-20 04:19:41 EDT - 62% used</title></circle>
+<circle class="usage-point" cx="429.27" cy="172.50" r="4" fill="#2563eb"><title>Codex 5-hour window - 2026-05-20 04:49:44 EDT - 75% used</title></circle>
+<circle class="usage-point" cx="445.59" cy="148.38" r="4" fill="#2563eb"><title>Codex 5-hour window - 2026-05-20 05:19:46 EDT - 81% used</title></circle>
+<circle class="usage-point" cx="461.89" cy="461.94" r="4" fill="#2563eb"><title>Codex 5-hour window - 2026-05-20 05:49:47 EDT - 3% used</title></circle>
+<circle class="usage-point" cx="478.20" cy="441.84" r="4" fill="#2563eb"><title>Codex 5-hour window - 2026-05-20 06:19:48 EDT - 8% used</title></circle>
+<circle class="usage-point" cx="494.49" cy="413.70" r="4" fill="#2563eb"><title>Codex 5-hour window - 2026-05-20 06:49:48 EDT - 15% used</title></circle>
+<circle class="usage-point" cx="510.80" cy="381.54" r="4" fill="#2563eb"><title>Codex 5-hour window - 2026-05-20 07:19:49 EDT - 23% used</title></circle>
+<circle class="usage-point" cx="527.10" cy="353.40" r="4" fill="#2563eb"><title>Codex 5-hour window - 2026-05-20 07:49:50 EDT - 30% used</title></circle>
+<circle class="usage-point" cx="543.41" cy="345.36" r="4" fill="#2563eb"><title>Codex 5-hour window - 2026-05-20 08:19:51 EDT - 32% used</title></circle>
+<circle class="usage-point" cx="559.73" cy="329.28" r="4" fill="#2563eb"><title>Codex 5-hour window - 2026-05-20 08:49:54 EDT - 36% used</title></circle>
+<circle class="usage-point" cx="576.04" cy="297.12" r="4" fill="#2563eb"><title>Codex 5-hour window - 2026-05-20 09:19:56 EDT - 44% used</title></circle>
+<circle class="usage-point" cx="592.35" cy="285.06" r="4" fill="#2563eb"><title>Codex 5-hour window - 2026-05-20 09:49:57 EDT - 47% used</title></circle>
+<circle class="usage-point" cx="608.65" cy="277.02" r="4" fill="#2563eb"><title>Codex 5-hour window - 2026-05-20 10:19:57 EDT - 49% used</title></circle>
+<circle class="usage-point" cx="624.95" cy="457.92" r="4" fill="#2563eb"><title>Codex 5-hour window - 2026-05-20 10:49:58 EDT - 4% used</title></circle>
+<circle class="usage-point" cx="641.26" cy="441.84" r="4" fill="#2563eb"><title>Codex 5-hour window - 2026-05-20 11:19:59 EDT - 8% used</title></circle>
+<circle class="usage-point" cx="657.56" cy="421.74" r="4" fill="#2563eb"><title>Codex 5-hour window - 2026-05-20 11:50:00 EDT - 13% used</title></circle>
+<circle class="usage-point" cx="673.86" cy="409.68" r="4" fill="#2563eb"><title>Codex 5-hour window - 2026-05-20 12:20:00 EDT - 16% used</title></circle>
+<circle class="usage-point" cx="690.16" cy="389.58" r="4" fill="#2563eb"><title>Codex 5-hour window - 2026-05-20 12:50:01 EDT - 21% used</title></circle>
+<circle class="usage-point" cx="706.47" cy="349.38" r="4" fill="#2563eb"><title>Codex 5-hour window - 2026-05-20 13:20:02 EDT - 31% used</title></circle>
+<circle class="usage-point" cx="722.77" cy="329.28" r="4" fill="#2563eb"><title>Codex 5-hour window - 2026-05-20 13:50:03 EDT - 36% used</title></circle>
+<circle class="usage-point" cx="739.08" cy="273.00" r="4" fill="#2563eb"><title>Codex 5-hour window - 2026-05-20 14:20:04 EDT - 50% used</title></circle>
+<circle class="usage-point" cx="751.21" cy="260.94" r="4" fill="#2563eb"><title>Codex 5-hour window - 2026-05-20 14:42:24 EDT - 53% used</title></circle>
+<circle class="usage-point" cx="755.38" cy="248.88" r="4" fill="#2563eb"><title>Codex 5-hour window - 2026-05-20 14:50:05 EDT - 56% used</title></circle>
+<circle class="usage-point" cx="771.69" cy="212.70" r="4" fill="#2563eb"><title>Codex 5-hour window - 2026-05-20 15:20:06 EDT - 65% used</title></circle>
+<circle class="usage-point" cx="787.99" cy="461.94" r="4" fill="#2563eb"><title>Codex 5-hour window - 2026-05-20 15:50:07 EDT - 3% used</title></circle>
+<circle class="usage-point" cx="804.30" cy="409.68" r="4" fill="#2563eb"><title>Codex 5-hour window - 2026-05-20 16:20:08 EDT - 16% used</title></circle>
+<circle class="usage-point" cx="810.04" cy="373.50" r="4" fill="#2563eb"><title>Codex 5-hour window - 2026-05-20 16:30:42 EDT - 25% used</title></circle>
+<circle class="usage-point" cx="810.66" cy="373.50" r="4" fill="#2563eb"><title>Codex 5-hour window - 2026-05-20 16:31:51 EDT - 25% used</title></circle>
+<circle class="usage-point" cx="814.37" cy="357.42" r="4" fill="#2563eb"><title>Codex 5-hour window - 2026-05-20 16:38:41 EDT - 29% used</title></circle>
+<circle class="usage-point" cx="821.21" cy="341.34" r="4" fill="#2563eb"><title>Codex 5-hour window - 2026-05-20 16:51:16 EDT - 33% used</title></circle>
+<circle class="usage-point" cx="826.99" cy="333.30" r="4" fill="#2563eb"><title>Codex 5-hour window - 2026-05-20 17:01:54 EDT - 35% used</title></circle>
+<circle class="usage-point" cx="843.28" cy="317.22" r="4" fill="#2563eb"><title>Codex 5-hour window - 2026-05-20 17:31:54 EDT - 39% used</title></circle>
+<circle class="usage-point" cx="850.00" cy="309.18" r="4" fill="#2563eb"><title>Codex 5-hour window - 2026-05-20 17:44:16 EDT - 41% used</title></circle>
+<line x1="878" y1="86" x2="898" y2="86" stroke="#2563eb" stroke-width="3"/>
+<text x="906" y="90" font-family="system-ui, -apple-system, sans-serif" font-size="12" fill="#0f172a">Codex 5-hour window</text>
+<path d="M 78.00 445.86 L 78.41 445.86 L 79.39 445.86 L 79.77 445.86 L 96.07 437.82 L 102.79 433.80 L 103.17 433.80 L 119.46 429.78 L 135.77 425.76 L 152.07 425.76 L 168.38 421.74 L 184.69 417.72 L 201.01 417.72 L 217.31 417.72 L 233.62 413.70 L 249.92 413.70 L 266.23 409.68 L 282.52 405.66 L 298.83 401.64 L 304.13 397.62 L 315.14 393.60 L 331.43 393.60 L 347.74 389.58 L 364.04 385.56 L 380.34 381.54 L 396.64 373.50 L 412.95 369.48 L 429.27 361.44 L 445.59 357.42 L 461.89 353.40 L 478.20 349.38 L 494.49 345.36 L 510.80 341.34 L 527.10 337.32 L 543.41 333.30 L 559.73 333.30 L 576.04 329.28 L 592.35 325.26 L 608.65 325.26 L 624.95 321.24 L 641.26 321.24 L 657.56 317.22 L 673.86 313.20 L 690.16 313.20 L 706.47 305.16 L 722.77 301.14 L 739.08 293.10 L 751.21 293.10 L 755.38 289.08 L 771.69 285.06 L 787.99 281.04 L 804.30 273.00 L 810.04 268.98 L 810.66 268.98 L 814.37 264.96 L 821.21 260.94 L 826.99 260.94 L 843.28 260.94 L 850.00 256.92" fill="none" stroke="#dc2626" stroke-width="2.5"/>
+<circle class="usage-point" cx="78.00" cy="445.86" r="4" fill="#dc2626"><title>Codex 7-day window - 2026-05-19 18:03:04 EDT - 7% used</title></circle>
+<circle class="usage-point" cx="78.41" cy="445.86" r="4" fill="#dc2626"><title>Codex 7-day window - 2026-05-19 18:03:49 EDT - 7% used</title></circle>
+<circle class="usage-point" cx="79.39" cy="445.86" r="4" fill="#dc2626"><title>Codex 7-day window - 2026-05-19 18:05:37 EDT - 7% used</title></circle>
+<circle class="usage-point" cx="79.77" cy="445.86" r="4" fill="#dc2626"><title>Codex 7-day window - 2026-05-19 18:06:19 EDT - 7% used</title></circle>
+<circle class="usage-point" cx="96.07" cy="437.82" r="4" fill="#dc2626"><title>Codex 7-day window - 2026-05-19 18:36:20 EDT - 9% used</title></circle>
+<circle class="usage-point" cx="102.79" cy="433.80" r="4" fill="#dc2626"><title>Codex 7-day window - 2026-05-19 18:48:42 EDT - 10% used</title></circle>
+<circle class="usage-point" cx="103.17" cy="433.80" r="4" fill="#dc2626"><title>Codex 7-day window - 2026-05-19 18:49:24 EDT - 10% used</title></circle>
+<circle class="usage-point" cx="119.46" cy="429.78" r="4" fill="#dc2626"><title>Codex 7-day window - 2026-05-19 19:19:24 EDT - 11% used</title></circle>
+<circle class="usage-point" cx="135.77" cy="425.76" r="4" fill="#dc2626"><title>Codex 7-day window - 2026-05-19 19:49:25 EDT - 12% used</title></circle>
+<circle class="usage-point" cx="152.07" cy="425.76" r="4" fill="#dc2626"><title>Codex 7-day window - 2026-05-19 20:19:26 EDT - 12% used</title></circle>
+<circle class="usage-point" cx="168.38" cy="421.74" r="4" fill="#dc2626"><title>Codex 7-day window - 2026-05-19 20:49:27 EDT - 13% used</title></circle>
+<circle class="usage-point" cx="184.69" cy="417.72" r="4" fill="#dc2626"><title>Codex 7-day window - 2026-05-19 21:19:29 EDT - 14% used</title></circle>
+<circle class="usage-point" cx="201.01" cy="417.72" r="4" fill="#dc2626"><title>Codex 7-day window - 2026-05-19 21:49:31 EDT - 14% used</title></circle>
+<circle class="usage-point" cx="217.31" cy="417.72" r="4" fill="#dc2626"><title>Codex 7-day window - 2026-05-19 22:19:32 EDT - 14% used</title></circle>
+<circle class="usage-point" cx="233.62" cy="413.70" r="4" fill="#dc2626"><title>Codex 7-day window - 2026-05-19 22:49:33 EDT - 15% used</title></circle>
+<circle class="usage-point" cx="249.92" cy="413.70" r="4" fill="#dc2626"><title>Codex 7-day window - 2026-05-19 23:19:34 EDT - 15% used</title></circle>
+<circle class="usage-point" cx="266.23" cy="409.68" r="4" fill="#dc2626"><title>Codex 7-day window - 2026-05-19 23:49:35 EDT - 16% used</title></circle>
+<circle class="usage-point" cx="282.52" cy="405.66" r="4" fill="#dc2626"><title>Codex 7-day window - 2026-05-20 00:19:35 EDT - 17% used</title></circle>
+<circle class="usage-point" cx="298.83" cy="401.64" r="4" fill="#dc2626"><title>Codex 7-day window - 2026-05-20 00:49:36 EDT - 18% used</title></circle>
+<circle class="usage-point" cx="304.13" cy="397.62" r="4" fill="#dc2626"><title>Codex 7-day window - 2026-05-20 00:59:21 EDT - 19% used</title></circle>
+<circle class="usage-point" cx="315.14" cy="393.60" r="4" fill="#dc2626"><title>Codex 7-day window - 2026-05-20 01:19:37 EDT - 20% used</title></circle>
+<circle class="usage-point" cx="331.43" cy="393.60" r="4" fill="#dc2626"><title>Codex 7-day window - 2026-05-20 01:49:37 EDT - 20% used</title></circle>
+<circle class="usage-point" cx="347.74" cy="389.58" r="4" fill="#dc2626"><title>Codex 7-day window - 2026-05-20 02:19:38 EDT - 21% used</title></circle>
+<circle class="usage-point" cx="364.04" cy="385.56" r="4" fill="#dc2626"><title>Codex 7-day window - 2026-05-20 02:49:39 EDT - 22% used</title></circle>
+<circle class="usage-point" cx="380.34" cy="381.54" r="4" fill="#dc2626"><title>Codex 7-day window - 2026-05-20 03:19:39 EDT - 23% used</title></circle>
+<circle class="usage-point" cx="396.64" cy="373.50" r="4" fill="#dc2626"><title>Codex 7-day window - 2026-05-20 03:49:40 EDT - 25% used</title></circle>
+<circle class="usage-point" cx="412.95" cy="369.48" r="4" fill="#dc2626"><title>Codex 7-day window - 2026-05-20 04:19:41 EDT - 26% used</title></circle>
+<circle class="usage-point" cx="429.27" cy="361.44" r="4" fill="#dc2626"><title>Codex 7-day window - 2026-05-20 04:49:44 EDT - 28% used</title></circle>
+<circle class="usage-point" cx="445.59" cy="357.42" r="4" fill="#dc2626"><title>Codex 7-day window - 2026-05-20 05:19:46 EDT - 29% used</title></circle>
+<circle class="usage-point" cx="461.89" cy="353.40" r="4" fill="#dc2626"><title>Codex 7-day window - 2026-05-20 05:49:47 EDT - 30% used</title></circle>
+<circle class="usage-point" cx="478.20" cy="349.38" r="4" fill="#dc2626"><title>Codex 7-day window - 2026-05-20 06:19:48 EDT - 31% used</title></circle>
+<circle class="usage-point" cx="494.49" cy="345.36" r="4" fill="#dc2626"><title>Codex 7-day window - 2026-05-20 06:49:48 EDT - 32% used</title></circle>
+<circle class="usage-point" cx="510.80" cy="341.34" r="4" fill="#dc2626"><title>Codex 7-day window - 2026-05-20 07:19:49 EDT - 33% used</title></circle>
+<circle class="usage-point" cx="527.10" cy="337.32" r="4" fill="#dc2626"><title>Codex 7-day window - 2026-05-20 07:49:50 EDT - 34% used</title></circle>
+<circle class="usage-point" cx="543.41" cy="333.30" r="4" fill="#dc2626"><title>Codex 7-day window - 2026-05-20 08:19:51 EDT - 35% used</title></circle>
+<circle class="usage-point" cx="559.73" cy="333.30" r="4" fill="#dc2626"><title>Codex 7-day window - 2026-05-20 08:49:54 EDT - 35% used</title></circle>
+<circle class="usage-point" cx="576.04" cy="329.28" r="4" fill="#dc2626"><title>Codex 7-day window - 2026-05-20 09:19:56 EDT - 36% used</title></circle>
+<circle class="usage-point" cx="592.35" cy="325.26" r="4" fill="#dc2626"><title>Codex 7-day window - 2026-05-20 09:49:57 EDT - 37% used</title></circle>
+<circle class="usage-point" cx="608.65" cy="325.26" r="4" fill="#dc2626"><title>Codex 7-day window - 2026-05-20 10:19:57 EDT - 37% used</title></circle>
+<circle class="usage-point" cx="624.95" cy="321.24" r="4" fill="#dc2626"><title>Codex 7-day window - 2026-05-20 10:49:58 EDT - 38% used</title></circle>
+<circle class="usage-point" cx="641.26" cy="321.24" r="4" fill="#dc2626"><title>Codex 7-day window - 2026-05-20 11:19:59 EDT - 38% used</title></circle>
+<circle class="usage-point" cx="657.56" cy="317.22" r="4" fill="#dc2626"><title>Codex 7-day window - 2026-05-20 11:50:00 EDT - 39% used</title></circle>
+<circle class="usage-point" cx="673.86" cy="313.20" r="4" fill="#dc2626"><title>Codex 7-day window - 2026-05-20 12:20:00 EDT - 40% used</title></circle>
+<circle class="usage-point" cx="690.16" cy="313.20" r="4" fill="#dc2626"><title>Codex 7-day window - 2026-05-20 12:50:01 EDT - 40% used</title></circle>
+<circle class="usage-point" cx="706.47" cy="305.16" r="4" fill="#dc2626"><title>Codex 7-day window - 2026-05-20 13:20:02 EDT - 42% used</title></circle>
+<circle class="usage-point" cx="722.77" cy="301.14" r="4" fill="#dc2626"><title>Codex 7-day window - 2026-05-20 13:50:03 EDT - 43% used</title></circle>
+<circle class="usage-point" cx="739.08" cy="293.10" r="4" fill="#dc2626"><title>Codex 7-day window - 2026-05-20 14:20:04 EDT - 45% used</title></circle>
+<circle class="usage-point" cx="751.21" cy="293.10" r="4" fill="#dc2626"><title>Codex 7-day window - 2026-05-20 14:42:24 EDT - 45% used</title></circle>
+<circle class="usage-point" cx="755.38" cy="289.08" r="4" fill="#dc2626"><title>Codex 7-day window - 2026-05-20 14:50:05 EDT - 46% used</title></circle>
+<circle class="usage-point" cx="771.69" cy="285.06" r="4" fill="#dc2626"><title>Codex 7-day window - 2026-05-20 15:20:06 EDT - 47% used</title></circle>
+<circle class="usage-point" cx="787.99" cy="281.04" r="4" fill="#dc2626"><title>Codex 7-day window - 2026-05-20 15:50:07 EDT - 48% used</title></circle>
+<circle class="usage-point" cx="804.30" cy="273.00" r="4" fill="#dc2626"><title>Codex 7-day window - 2026-05-20 16:20:08 EDT - 50% used</title></circle>
+<circle class="usage-point" cx="810.04" cy="268.98" r="4" fill="#dc2626"><title>Codex 7-day window - 2026-05-20 16:30:42 EDT - 51% used</title></circle>
+<circle class="usage-point" cx="810.66" cy="268.98" r="4" fill="#dc2626"><title>Codex 7-day window - 2026-05-20 16:31:51 EDT - 51% used</title></circle>
+<circle class="usage-point" cx="814.37" cy="264.96" r="4" fill="#dc2626"><title>Codex 7-day window - 2026-05-20 16:38:41 EDT - 52% used</title></circle>
+<circle class="usage-point" cx="821.21" cy="260.94" r="4" fill="#dc2626"><title>Codex 7-day window - 2026-05-20 16:51:16 EDT - 53% used</title></circle>
+<circle class="usage-point" cx="826.99" cy="260.94" r="4" fill="#dc2626"><title>Codex 7-day window - 2026-05-20 17:01:54 EDT - 53% used</title></circle>
+<circle class="usage-point" cx="843.28" cy="260.94" r="4" fill="#dc2626"><title>Codex 7-day window - 2026-05-20 17:31:54 EDT - 53% used</title></circle>
+<circle class="usage-point" cx="850.00" cy="256.92" r="4" fill="#dc2626"><title>Codex 7-day window - 2026-05-20 17:44:16 EDT - 54% used</title></circle>
+<line x1="878" y1="110" x2="898" y2="110" stroke="#dc2626" stroke-width="3"/>
+<text x="906" y="114" font-family="system-ui, -apple-system, sans-serif" font-size="12" fill="#0f172a">Codex 7-day window</text>
+<path d="M 78.00 474.00 L 78.41 474.00 L 79.39 474.00 L 79.77 474.00 L 96.07 474.00 L 102.79 474.00 L 103.17 474.00 L 119.46 474.00 L 135.77 474.00 L 152.07 474.00 L 168.38 474.00 L 184.69 474.00 L 201.01 474.00 L 217.31 474.00 L 233.62 474.00 L 249.92 474.00 L 266.23 474.00 L 282.52 474.00 L 298.83 474.00 L 304.13 474.00 L 315.14 474.00 L 331.43 474.00 L 347.74 474.00 L 364.04 474.00 L 380.34 474.00 L 396.64 474.00 L 412.95 474.00 L 429.27 474.00 L 445.59 474.00 L 461.89 474.00 L 478.20 474.00 L 494.49 474.00 L 510.80 474.00 L 527.10 474.00 L 543.41 474.00 L 559.73 474.00 L 576.04 474.00 L 592.35 474.00 L 608.65 474.00 L 624.95 474.00 L 641.26 474.00 L 657.56 474.00 L 673.86 474.00 L 690.16 474.00 L 706.47 474.00 L 722.77 474.00 L 739.08 474.00 L 751.21 474.00 L 755.38 474.00 L 771.69 474.00 L 787.99 474.00 L 804.30 474.00 L 810.04 474.00 L 810.66 474.00 L 814.37 474.00 L 821.21 474.00 L 826.99 474.00 L 843.28 474.00 L 850.00 474.00" fill="none" stroke="#16a34a" stroke-width="2.5"/>
+<circle class="usage-point" cx="78.00" cy="474.00" r="4" fill="#16a34a"><title>GPT-5.3-Codex-Spark 5-hour window - 2026-05-19 18:03:04 EDT - 0% used</title></circle>
+<circle class="usage-point" cx="78.41" cy="474.00" r="4" fill="#16a34a"><title>GPT-5.3-Codex-Spark 5-hour window - 2026-05-19 18:03:49 EDT - 0% used</title></circle>
+<circle class="usage-point" cx="79.39" cy="474.00" r="4" fill="#16a34a"><title>GPT-5.3-Codex-Spark 5-hour window - 2026-05-19 18:05:37 EDT - 0% used</title></circle>
+<circle class="usage-point" cx="79.77" cy="474.00" r="4" fill="#16a34a"><title>GPT-5.3-Codex-Spark 5-hour window - 2026-05-19 18:06:19 EDT - 0% used</title></circle>
+<circle class="usage-point" cx="96.07" cy="474.00" r="4" fill="#16a34a"><title>GPT-5.3-Codex-Spark 5-hour window - 2026-05-19 18:36:20 EDT - 0% used</title></circle>
+<circle class="usage-point" cx="102.79" cy="474.00" r="4" fill="#16a34a"><title>GPT-5.3-Codex-Spark 5-hour window - 2026-05-19 18:48:42 EDT - 0% used</title></circle>
+<circle class="usage-point" cx="103.17" cy="474.00" r="4" fill="#16a34a"><title>GPT-5.3-Codex-Spark 5-hour window - 2026-05-19 18:49:24 EDT - 0% used</title></circle>
+<circle class="usage-point" cx="119.46" cy="474.00" r="4" fill="#16a34a"><title>GPT-5.3-Codex-Spark 5-hour window - 2026-05-19 19:19:24 EDT - 0% used</title></circle>
+<circle class="usage-point" cx="135.77" cy="474.00" r="4" fill="#16a34a"><title>GPT-5.3-Codex-Spark 5-hour window - 2026-05-19 19:49:25 EDT - 0% used</title></circle>
+<circle class="usage-point" cx="152.07" cy="474.00" r="4" fill="#16a34a"><title>GPT-5.3-Codex-Spark 5-hour window - 2026-05-19 20:19:26 EDT - 0% used</title></circle>
+<circle class="usage-point" cx="168.38" cy="474.00" r="4" fill="#16a34a"><title>GPT-5.3-Codex-Spark 5-hour window - 2026-05-19 20:49:27 EDT - 0% used</title></circle>
+<circle class="usage-point" cx="184.69" cy="474.00" r="4" fill="#16a34a"><title>GPT-5.3-Codex-Spark 5-hour window - 2026-05-19 21:19:29 EDT - 0% used</title></circle>
+<circle class="usage-point" cx="201.01" cy="474.00" r="4" fill="#16a34a"><title>GPT-5.3-Codex-Spark 5-hour window - 2026-05-19 21:49:31 EDT - 0% used</title></circle>
+<circle class="usage-point" cx="217.31" cy="474.00" r="4" fill="#16a34a"><title>GPT-5.3-Codex-Spark 5-hour window - 2026-05-19 22:19:32 EDT - 0% used</title></circle>
+<circle class="usage-point" cx="233.62" cy="474.00" r="4" fill="#16a34a"><title>GPT-5.3-Codex-Spark 5-hour window - 2026-05-19 22:49:33 EDT - 0% used</title></circle>
+<circle class="usage-point" cx="249.92" cy="474.00" r="4" fill="#16a34a"><title>GPT-5.3-Codex-Spark 5-hour window - 2026-05-19 23:19:34 EDT - 0% used</title></circle>
+<circle class="usage-point" cx="266.23" cy="474.00" r="4" fill="#16a34a"><title>GPT-5.3-Codex-Spark 5-hour window - 2026-05-19 23:49:35 EDT - 0% used</title></circle>
+<circle class="usage-point" cx="282.52" cy="474.00" r="4" fill="#16a34a"><title>GPT-5.3-Codex-Spark 5-hour window - 2026-05-20 00:19:35 EDT - 0% used</title></circle>
+<circle class="usage-point" cx="298.83" cy="474.00" r="4" fill="#16a34a"><title>GPT-5.3-Codex-Spark 5-hour window - 2026-05-20 00:49:36 EDT - 0% used</title></circle>
+<circle class="usage-point" cx="304.13" cy="474.00" r="4" fill="#16a34a"><title>GPT-5.3-Codex-Spark 5-hour window - 2026-05-20 00:59:21 EDT - 0% used</title></circle>
+<circle class="usage-point" cx="315.14" cy="474.00" r="4" fill="#16a34a"><title>GPT-5.3-Codex-Spark 5-hour window - 2026-05-20 01:19:37 EDT - 0% used</title></circle>
+<circle class="usage-point" cx="331.43" cy="474.00" r="4" fill="#16a34a"><title>GPT-5.3-Codex-Spark 5-hour window - 2026-05-20 01:49:37 EDT - 0% used</title></circle>
+<circle class="usage-point" cx="347.74" cy="474.00" r="4" fill="#16a34a"><title>GPT-5.3-Codex-Spark 5-hour window - 2026-05-20 02:19:38 EDT - 0% used</title></circle>
+<circle class="usage-point" cx="364.04" cy="474.00" r="4" fill="#16a34a"><title>GPT-5.3-Codex-Spark 5-hour window - 2026-05-20 02:49:39 EDT - 0% used</title></circle>
+<circle class="usage-point" cx="380.34" cy="474.00" r="4" fill="#16a34a"><title>GPT-5.3-Codex-Spark 5-hour window - 2026-05-20 03:19:39 EDT - 0% used</title></circle>
+<circle class="usage-point" cx="396.64" cy="474.00" r="4" fill="#16a34a"><title>GPT-5.3-Codex-Spark 5-hour window - 2026-05-20 03:49:40 EDT - 0% used</title></circle>
+<circle class="usage-point" cx="412.95" cy="474.00" r="4" fill="#16a34a"><title>GPT-5.3-Codex-Spark 5-hour window - 2026-05-20 04:19:41 EDT - 0% used</title></circle>
+<circle class="usage-point" cx="429.27" cy="474.00" r="4" fill="#16a34a"><title>GPT-5.3-Codex-Spark 5-hour window - 2026-05-20 04:49:44 EDT - 0% used</title></circle>
+<circle class="usage-point" cx="445.59" cy="474.00" r="4" fill="#16a34a"><title>GPT-5.3-Codex-Spark 5-hour window - 2026-05-20 05:19:46 EDT - 0% used</title></circle>
+<circle class="usage-point" cx="461.89" cy="474.00" r="4" fill="#16a34a"><title>GPT-5.3-Codex-Spark 5-hour window - 2026-05-20 05:49:47 EDT - 0% used</title></circle>
+<circle class="usage-point" cx="478.20" cy="474.00" r="4" fill="#16a34a"><title>GPT-5.3-Codex-Spark 5-hour window - 2026-05-20 06:19:48 EDT - 0% used</title></circle>
+<circle class="usage-point" cx="494.49" cy="474.00" r="4" fill="#16a34a"><title>GPT-5.3-Codex-Spark 5-hour window - 2026-05-20 06:49:48 EDT - 0% used</title></circle>
+<circle class="usage-point" cx="510.80" cy="474.00" r="4" fill="#16a34a"><title>GPT-5.3-Codex-Spark 5-hour window - 2026-05-20 07:19:49 EDT - 0% used</title></circle>
+<circle class="usage-point" cx="527.10" cy="474.00" r="4" fill="#16a34a"><title>GPT-5.3-Codex-Spark 5-hour window - 2026-05-20 07:49:50 EDT - 0% used</title></circle>
+<circle class="usage-point" cx="543.41" cy="474.00" r="4" fill="#16a34a"><title>GPT-5.3-Codex-Spark 5-hour window - 2026-05-20 08:19:51 EDT - 0% used</title></circle>
+<circle class="usage-point" cx="559.73" cy="474.00" r="4" fill="#16a34a"><title>GPT-5.3-Codex-Spark 5-hour window - 2026-05-20 08:49:54 EDT - 0% used</title></circle>
+<circle class="usage-point" cx="576.04" cy="474.00" r="4" fill="#16a34a"><title>GPT-5.3-Codex-Spark 5-hour window - 2026-05-20 09:19:56 EDT - 0% used</title></circle>
+<circle class="usage-point" cx="592.35" cy="474.00" r="4" fill="#16a34a"><title>GPT-5.3-Codex-Spark 5-hour window - 2026-05-20 09:49:57 EDT - 0% used</title></circle>
+<circle class="usage-point" cx="608.65" cy="474.00" r="4" fill="#16a34a"><title>GPT-5.3-Codex-Spark 5-hour window - 2026-05-20 10:19:57 EDT - 0% used</title></circle>
+<circle class="usage-point" cx="624.95" cy="474.00" r="4" fill="#16a34a"><title>GPT-5.3-Codex-Spark 5-hour window - 2026-05-20 10:49:58 EDT - 0% used</title></circle>
+<circle class="usage-point" cx="641.26" cy="474.00" r="4" fill="#16a34a"><title>GPT-5.3-Codex-Spark 5-hour window - 2026-05-20 11:19:59 EDT - 0% used</title></circle>
+<circle class="usage-point" cx="657.56" cy="474.00" r="4" fill="#16a34a"><title>GPT-5.3-Codex-Spark 5-hour window - 2026-05-20 11:50:00 EDT - 0% used</title></circle>
+<circle class="usage-point" cx="673.86" cy="474.00" r="4" fill="#16a34a"><title>GPT-5.3-Codex-Spark 5-hour window - 2026-05-20 12:20:00 EDT - 0% used</title></circle>
+<circle class="usage-point" cx="690.16" cy="474.00" r="4" fill="#16a34a"><title>GPT-5.3-Codex-Spark 5-hour window - 2026-05-20 12:50:01 EDT - 0% used</title></circle>
+<circle class="usage-point" cx="706.47" cy="474.00" r="4" fill="#16a34a"><title>GPT-5.3-Codex-Spark 5-hour window - 2026-05-20 13:20:02 EDT - 0% used</title></circle>
+<circle class="usage-point" cx="722.77" cy="474.00" r="4" fill="#16a34a"><title>GPT-5.3-Codex-Spark 5-hour window - 2026-05-20 13:50:03 EDT - 0% used</title></circle>
+<circle class="usage-point" cx="739.08" cy="474.00" r="4" fill="#16a34a"><title>GPT-5.3-Codex-Spark 5-hour window - 2026-05-20 14:20:04 EDT - 0% used</title></circle>
+<circle class="usage-point" cx="751.21" cy="474.00" r="4" fill="#16a34a"><title>GPT-5.3-Codex-Spark 5-hour window - 2026-05-20 14:42:24 EDT - 0% used</title></circle>
+<circle class="usage-point" cx="755.38" cy="474.00" r="4" fill="#16a34a"><title>GPT-5.3-Codex-Spark 5-hour window - 2026-05-20 14:50:05 EDT - 0% used</title></circle>
+<circle class="usage-point" cx="771.69" cy="474.00" r="4" fill="#16a34a"><title>GPT-5.3-Codex-Spark 5-hour window - 2026-05-20 15:20:06 EDT - 0% used</title></circle>
+<circle class="usage-point" cx="787.99" cy="474.00" r="4" fill="#16a34a"><title>GPT-5.3-Codex-Spark 5-hour window - 2026-05-20 15:50:07 EDT - 0% used</title></circle>
+<circle class="usage-point" cx="804.30" cy="474.00" r="4" fill="#16a34a"><title>GPT-5.3-Codex-Spark 5-hour window - 2026-05-20 16:20:08 EDT - 0% used</title></circle>
+<circle class="usage-point" cx="810.04" cy="474.00" r="4" fill="#16a34a"><title>GPT-5.3-Codex-Spark 5-hour window - 2026-05-20 16:30:42 EDT - 0% used</title></circle>
+<circle class="usage-point" cx="810.66" cy="474.00" r="4" fill="#16a34a"><title>GPT-5.3-Codex-Spark 5-hour window - 2026-05-20 16:31:51 EDT - 0% used</title></circle>
+<circle class="usage-point" cx="814.37" cy="474.00" r="4" fill="#16a34a"><title>GPT-5.3-Codex-Spark 5-hour window - 2026-05-20 16:38:41 EDT - 0% used</title></circle>
+<circle class="usage-point" cx="821.21" cy="474.00" r="4" fill="#16a34a"><title>GPT-5.3-Codex-Spark 5-hour window - 2026-05-20 16:51:16 EDT - 0% used</title></circle>
+<circle class="usage-point" cx="826.99" cy="474.00" r="4" fill="#16a34a"><title>GPT-5.3-Codex-Spark 5-hour window - 2026-05-20 17:01:54 EDT - 0% used</title></circle>
+<circle class="usage-point" cx="843.28" cy="474.00" r="4" fill="#16a34a"><title>GPT-5.3-Codex-Spark 5-hour window - 2026-05-20 17:31:54 EDT - 0% used</title></circle>
+<circle class="usage-point" cx="850.00" cy="474.00" r="4" fill="#16a34a"><title>GPT-5.3-Codex-Spark 5-hour window - 2026-05-20 17:44:16 EDT - 0% used</title></circle>
+<line x1="878" y1="134" x2="898" y2="134" stroke="#16a34a" stroke-width="3"/>
+<text x="906" y="138" font-family="system-ui, -apple-system, sans-serif" font-size="12" fill="#0f172a">GPT-5.3-Codex-Spark 5-hour window</text>
+<path d="M 78.00 474.00 L 78.41 474.00 L 79.39 474.00 L 79.77 474.00 L 96.07 474.00 L 102.79 474.00 L 103.17 474.00 L 119.46 474.00 L 135.77 474.00 L 152.07 474.00 L 168.38 474.00 L 184.69 474.00 L 201.01 474.00 L 217.31 474.00 L 233.62 474.00 L 249.92 474.00 L 266.23 474.00 L 282.52 474.00 L 298.83 474.00 L 304.13 474.00 L 315.14 474.00 L 331.43 474.00 L 347.74 474.00 L 364.04 474.00 L 380.34 474.00 L 396.64 474.00 L 412.95 474.00 L 429.27 474.00 L 445.59 474.00 L 461.89 474.00 L 478.20 474.00 L 494.49 474.00 L 510.80 474.00 L 527.10 474.00 L 543.41 474.00 L 559.73 474.00 L 576.04 474.00 L 592.35 474.00 L 608.65 474.00 L 624.95 474.00 L 641.26 474.00 L 657.56 474.00 L 673.86 474.00 L 690.16 474.00 L 706.47 474.00 L 722.77 474.00 L 739.08 474.00 L 751.21 474.00 L 755.38 474.00 L 771.69 474.00 L 787.99 474.00 L 804.30 474.00 L 810.04 474.00 L 810.66 474.00 L 814.37 474.00 L 821.21 474.00 L 826.99 474.00 L 843.28 474.00 L 850.00 474.00" fill="none" stroke="#9333ea" stroke-width="2.5"/>
+<circle class="usage-point" cx="78.00" cy="474.00" r="4" fill="#9333ea"><title>GPT-5.3-Codex-Spark 7-day window - 2026-05-19 18:03:04 EDT - 0% used</title></circle>
+<circle class="usage-point" cx="78.41" cy="474.00" r="4" fill="#9333ea"><title>GPT-5.3-Codex-Spark 7-day window - 2026-05-19 18:03:49 EDT - 0% used</title></circle>
+<circle class="usage-point" cx="79.39" cy="474.00" r="4" fill="#9333ea"><title>GPT-5.3-Codex-Spark 7-day window - 2026-05-19 18:05:37 EDT - 0% used</title></circle>
+<circle class="usage-point" cx="79.77" cy="474.00" r="4" fill="#9333ea"><title>GPT-5.3-Codex-Spark 7-day window - 2026-05-19 18:06:19 EDT - 0% used</title></circle>
+<circle class="usage-point" cx="96.07" cy="474.00" r="4" fill="#9333ea"><title>GPT-5.3-Codex-Spark 7-day window - 2026-05-19 18:36:20 EDT - 0% used</title></circle>
+<circle class="usage-point" cx="102.79" cy="474.00" r="4" fill="#9333ea"><title>GPT-5.3-Codex-Spark 7-day window - 2026-05-19 18:48:42 EDT - 0% used</title></circle>
+<circle class="usage-point" cx="103.17" cy="474.00" r="4" fill="#9333ea"><title>GPT-5.3-Codex-Spark 7-day window - 2026-05-19 18:49:24 EDT - 0% used</title></circle>
+<circle class="usage-point" cx="119.46" cy="474.00" r="4" fill="#9333ea"><title>GPT-5.3-Codex-Spark 7-day window - 2026-05-19 19:19:24 EDT - 0% used</title></circle>
+<circle class="usage-point" cx="135.77" cy="474.00" r="4" fill="#9333ea"><title>GPT-5.3-Codex-Spark 7-day window - 2026-05-19 19:49:25 EDT - 0% used</title></circle>
+<circle class="usage-point" cx="152.07" cy="474.00" r="4" fill="#9333ea"><title>GPT-5.3-Codex-Spark 7-day window - 2026-05-19 20:19:26 EDT - 0% used</title></circle>
+<circle class="usage-point" cx="168.38" cy="474.00" r="4" fill="#9333ea"><title>GPT-5.3-Codex-Spark 7-day window - 2026-05-19 20:49:27 EDT - 0% used</title></circle>
+<circle class="usage-point" cx="184.69" cy="474.00" r="4" fill="#9333ea"><title>GPT-5.3-Codex-Spark 7-day window - 2026-05-19 21:19:29 EDT - 0% used</title></circle>
+<circle class="usage-point" cx="201.01" cy="474.00" r="4" fill="#9333ea"><title>GPT-5.3-Codex-Spark 7-day window - 2026-05-19 21:49:31 EDT - 0% used</title></circle>
+<circle class="usage-point" cx="217.31" cy="474.00" r="4" fill="#9333ea"><title>GPT-5.3-Codex-Spark 7-day window - 2026-05-19 22:19:32 EDT - 0% used</title></circle>
+<circle class="usage-point" cx="233.62" cy="474.00" r="4" fill="#9333ea"><title>GPT-5.3-Codex-Spark 7-day window - 2026-05-19 22:49:33 EDT - 0% used</title></circle>
+<circle class="usage-point" cx="249.92" cy="474.00" r="4" fill="#9333ea"><title>GPT-5.3-Codex-Spark 7-day window - 2026-05-19 23:19:34 EDT - 0% used</title></circle>
+<circle class="usage-point" cx="266.23" cy="474.00" r="4" fill="#9333ea"><title>GPT-5.3-Codex-Spark 7-day window - 2026-05-19 23:49:35 EDT - 0% used</title></circle>
+<circle class="usage-point" cx="282.52" cy="474.00" r="4" fill="#9333ea"><title>GPT-5.3-Codex-Spark 7-day window - 2026-05-20 00:19:35 EDT - 0% used</title></circle>
+<circle class="usage-point" cx="298.83" cy="474.00" r="4" fill="#9333ea"><title>GPT-5.3-Codex-Spark 7-day window - 2026-05-20 00:49:36 EDT - 0% used</title></circle>
+<circle class="usage-point" cx="304.13" cy="474.00" r="4" fill="#9333ea"><title>GPT-5.3-Codex-Spark 7-day window - 2026-05-20 00:59:21 EDT - 0% used</title></circle>
+<circle class="usage-point" cx="315.14" cy="474.00" r="4" fill="#9333ea"><title>GPT-5.3-Codex-Spark 7-day window - 2026-05-20 01:19:37 EDT - 0% used</title></circle>
+<circle class="usage-point" cx="331.43" cy="474.00" r="4" fill="#9333ea"><title>GPT-5.3-Codex-Spark 7-day window - 2026-05-20 01:49:37 EDT - 0% used</title></circle>
+<circle class="usage-point" cx="347.74" cy="474.00" r="4" fill="#9333ea"><title>GPT-5.3-Codex-Spark 7-day window - 2026-05-20 02:19:38 EDT - 0% used</title></circle>
+<circle class="usage-point" cx="364.04" cy="474.00" r="4" fill="#9333ea"><title>GPT-5.3-Codex-Spark 7-day window - 2026-05-20 02:49:39 EDT - 0% used</title></circle>
+<circle class="usage-point" cx="380.34" cy="474.00" r="4" fill="#9333ea"><title>GPT-5.3-Codex-Spark 7-day window - 2026-05-20 03:19:39 EDT - 0% used</title></circle>
+<circle class="usage-point" cx="396.64" cy="474.00" r="4" fill="#9333ea"><title>GPT-5.3-Codex-Spark 7-day window - 2026-05-20 03:49:40 EDT - 0% used</title></circle>
+<circle class="usage-point" cx="412.95" cy="474.00" r="4" fill="#9333ea"><title>GPT-5.3-Codex-Spark 7-day window - 2026-05-20 04:19:41 EDT - 0% used</title></circle>
+<circle class="usage-point" cx="429.27" cy="474.00" r="4" fill="#9333ea"><title>GPT-5.3-Codex-Spark 7-day window - 2026-05-20 04:49:44 EDT - 0% used</title></circle>
+<circle class="usage-point" cx="445.59" cy="474.00" r="4" fill="#9333ea"><title>GPT-5.3-Codex-Spark 7-day window - 2026-05-20 05:19:46 EDT - 0% used</title></circle>
+<circle class="usage-point" cx="461.89" cy="474.00" r="4" fill="#9333ea"><title>GPT-5.3-Codex-Spark 7-day window - 2026-05-20 05:49:47 EDT - 0% used</title></circle>
+<circle class="usage-point" cx="478.20" cy="474.00" r="4" fill="#9333ea"><title>GPT-5.3-Codex-Spark 7-day window - 2026-05-20 06:19:48 EDT - 0% used</title></circle>
+<circle class="usage-point" cx="494.49" cy="474.00" r="4" fill="#9333ea"><title>GPT-5.3-Codex-Spark 7-day window - 2026-05-20 06:49:48 EDT - 0% used</title></circle>
+<circle class="usage-point" cx="510.80" cy="474.00" r="4" fill="#9333ea"><title>GPT-5.3-Codex-Spark 7-day window - 2026-05-20 07:19:49 EDT - 0% used</title></circle>
+<circle class="usage-point" cx="527.10" cy="474.00" r="4" fill="#9333ea"><title>GPT-5.3-Codex-Spark 7-day window - 2026-05-20 07:49:50 EDT - 0% used</title></circle>
+<circle class="usage-point" cx="543.41" cy="474.00" r="4" fill="#9333ea"><title>GPT-5.3-Codex-Spark 7-day window - 2026-05-20 08:19:51 EDT - 0% used</title></circle>
+<circle class="usage-point" cx="559.73" cy="474.00" r="4" fill="#9333ea"><title>GPT-5.3-Codex-Spark 7-day window - 2026-05-20 08:49:54 EDT - 0% used</title></circle>
+<circle class="usage-point" cx="576.04" cy="474.00" r="4" fill="#9333ea"><title>GPT-5.3-Codex-Spark 7-day window - 2026-05-20 09:19:56 EDT - 0% used</title></circle>
+<circle class="usage-point" cx="592.35" cy="474.00" r="4" fill="#9333ea"><title>GPT-5.3-Codex-Spark 7-day window - 2026-05-20 09:49:57 EDT - 0% used</title></circle>
+<circle class="usage-point" cx="608.65" cy="474.00" r="4" fill="#9333ea"><title>GPT-5.3-Codex-Spark 7-day window - 2026-05-20 10:19:57 EDT - 0% used</title></circle>
+<circle class="usage-point" cx="624.95" cy="474.00" r="4" fill="#9333ea"><title>GPT-5.3-Codex-Spark 7-day window - 2026-05-20 10:49:58 EDT - 0% used</title></circle>
+<circle class="usage-point" cx="641.26" cy="474.00" r="4" fill="#9333ea"><title>GPT-5.3-Codex-Spark 7-day window - 2026-05-20 11:19:59 EDT - 0% used</title></circle>
+<circle class="usage-point" cx="657.56" cy="474.00" r="4" fill="#9333ea"><title>GPT-5.3-Codex-Spark 7-day window - 2026-05-20 11:50:00 EDT - 0% used</title></circle>
+<circle class="usage-point" cx="673.86" cy="474.00" r="4" fill="#9333ea"><title>GPT-5.3-Codex-Spark 7-day window - 2026-05-20 12:20:00 EDT - 0% used</title></circle>
+<circle class="usage-point" cx="690.16" cy="474.00" r="4" fill="#9333ea"><title>GPT-5.3-Codex-Spark 7-day window - 2026-05-20 12:50:01 EDT - 0% used</title></circle>
+<circle class="usage-point" cx="706.47" cy="474.00" r="4" fill="#9333ea"><title>GPT-5.3-Codex-Spark 7-day window - 2026-05-20 13:20:02 EDT - 0% used</title></circle>
+<circle class="usage-point" cx="722.77" cy="474.00" r="4" fill="#9333ea"><title>GPT-5.3-Codex-Spark 7-day window - 2026-05-20 13:50:03 EDT - 0% used</title></circle>
+<circle class="usage-point" cx="739.08" cy="474.00" r="4" fill="#9333ea"><title>GPT-5.3-Codex-Spark 7-day window - 2026-05-20 14:20:04 EDT - 0% used</title></circle>
+<circle class="usage-point" cx="751.21" cy="474.00" r="4" fill="#9333ea"><title>GPT-5.3-Codex-Spark 7-day window - 2026-05-20 14:42:24 EDT - 0% used</title></circle>
+<circle class="usage-point" cx="755.38" cy="474.00" r="4" fill="#9333ea"><title>GPT-5.3-Codex-Spark 7-day window - 2026-05-20 14:50:05 EDT - 0% used</title></circle>
+<circle class="usage-point" cx="771.69" cy="474.00" r="4" fill="#9333ea"><title>GPT-5.3-Codex-Spark 7-day window - 2026-05-20 15:20:06 EDT - 0% used</title></circle>
+<circle class="usage-point" cx="787.99" cy="474.00" r="4" fill="#9333ea"><title>GPT-5.3-Codex-Spark 7-day window - 2026-05-20 15:50:07 EDT - 0% used</title></circle>
+<circle class="usage-point" cx="804.30" cy="474.00" r="4" fill="#9333ea"><title>GPT-5.3-Codex-Spark 7-day window - 2026-05-20 16:20:08 EDT - 0% used</title></circle>
+<circle class="usage-point" cx="810.04" cy="474.00" r="4" fill="#9333ea"><title>GPT-5.3-Codex-Spark 7-day window - 2026-05-20 16:30:42 EDT - 0% used</title></circle>
+<circle class="usage-point" cx="810.66" cy="474.00" r="4" fill="#9333ea"><title>GPT-5.3-Codex-Spark 7-day window - 2026-05-20 16:31:51 EDT - 0% used</title></circle>
+<circle class="usage-point" cx="814.37" cy="474.00" r="4" fill="#9333ea"><title>GPT-5.3-Codex-Spark 7-day window - 2026-05-20 16:38:41 EDT - 0% used</title></circle>
+<circle class="usage-point" cx="821.21" cy="474.00" r="4" fill="#9333ea"><title>GPT-5.3-Codex-Spark 7-day window - 2026-05-20 16:51:16 EDT - 0% used</title></circle>
+<circle class="usage-point" cx="826.99" cy="474.00" r="4" fill="#9333ea"><title>GPT-5.3-Codex-Spark 7-day window - 2026-05-20 17:01:54 EDT - 0% used</title></circle>
+<circle class="usage-point" cx="843.28" cy="474.00" r="4" fill="#9333ea"><title>GPT-5.3-Codex-Spark 7-day window - 2026-05-20 17:31:54 EDT - 0% used</title></circle>
+<circle class="usage-point" cx="850.00" cy="474.00" r="4" fill="#9333ea"><title>GPT-5.3-Codex-Spark 7-day window - 2026-05-20 17:44:16 EDT - 0% used</title></circle>
+<line x1="878" y1="158" x2="898" y2="158" stroke="#9333ea" stroke-width="3"/>
+<text x="906" y="162" font-family="system-ui, -apple-system, sans-serif" font-size="12" fill="#0f172a">GPT-5.3-Codex-Spark 7-day window</text>
 </svg>

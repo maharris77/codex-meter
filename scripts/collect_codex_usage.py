@@ -180,9 +180,17 @@ def window_label(window: dict[str, Any]) -> str:
     return WINDOW_LABELS_BY_DURATION_MINS[duration_minutes]
 
 
+def display_limit_name(limit_id: str, limit_snapshot: dict[str, Any]) -> str:
+    limit_name = limit_snapshot.get("limitName")
+    if isinstance(limit_name, str) and limit_name:
+        return limit_name
+    if limit_id == "codex":
+        return "Codex"
+    return limit_id
+
+
 def series_label(limit_id: str, limit_snapshot: dict[str, Any], window: dict[str, Any]) -> str:
-    limit_name = limit_snapshot.get("limitName") or limit_id
-    return f"{limit_name} {window_label(window)}"
+    return f"{display_limit_name(limit_id, limit_snapshot)} {window_label(window)}"
 
 
 def collect_series(
@@ -336,7 +344,7 @@ def summary_lines(result: dict[str, Any]) -> list[str]:
     plan_type = primary.get("planType") or "unknown"
     lines.append(f"Plan: {plan_type}")
     for limit_id, limit_snapshot in sorted(limit_snapshots(result).items()):
-        limit_name = limit_snapshot.get("limitName") or limit_id
+        limit_name = display_limit_name(limit_id, limit_snapshot)
         for window_name in ("primary", "secondary"):
             window = limit_snapshot.get(window_name)
             if not window:
