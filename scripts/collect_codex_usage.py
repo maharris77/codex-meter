@@ -230,10 +230,10 @@ def format_percent(percent: float) -> str:
 
 
 def render_svg(snapshots: list[dict[str, Any]]) -> None:
-    width = 1100
+    width = 1240
     height = 560
     left = 78
-    right = 250
+    right = 360
     top = 72
     bottom = 86
     plot_width = width - left - right

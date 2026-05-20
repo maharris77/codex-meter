@@ -3,7 +3,7 @@
 Codex Usage Tracker is a tiny macOS tool that records local Codex usage-limit
 snapshots and renders them as a history graph.
 
-![Example Codex usage graph](docs/example-usage.svg)
+![Example Codex usage graph](docs/example-usage.png)
 
 Codex already shows current usage. This tool keeps a local timeline so you can
 see how each returned limit changes over time, including the 5-hour and 7-day
@@ -94,5 +94,5 @@ launchctl bootout "gui/$UID" \
 
 - `scripts/collect_codex_usage.py`: the collector and SVG renderer.
 - `launchd/com.mahos.codex-usage-tracker.plist`: the 5-minute LaunchAgent.
-- `docs/example-usage.svg`: example graph shown in this README.
+- `docs/example-usage.png`: example graph shown in this README.
 - `docs/research.md`: notes on the data source and related projects.
