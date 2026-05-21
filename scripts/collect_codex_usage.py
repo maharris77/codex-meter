@@ -14,7 +14,7 @@ from pathlib import Path
 from typing import Any
 
 
-OUTPUT_DIR = Path.home() / "Documents" / "Archives" / "Codex Usage Tracker"
+OUTPUT_DIR = Path.home() / "Documents" / "Archives" / "Codex Meter"
 SNAPSHOTS_PATH = OUTPUT_DIR / "snapshots.jsonl"
 LATEST_PATH = OUTPUT_DIR / "latest.json"
 SVG_PATH = OUTPUT_DIR / "usage.svg"
@@ -115,8 +115,8 @@ def read_codex_rate_limits() -> dict[str, Any]:
                 "method": "initialize",
                 "params": {
                     "clientInfo": {
-                        "name": "codex-usage-tracker",
-                        "title": "Codex Usage Tracker",
+                        "name": "codex-meter",
+                        "title": "Codex Meter",
                         "version": "0.1.0",
                     },
                     "capabilities": {"experimentalApi": True},

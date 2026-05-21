@@ -4,7 +4,7 @@
 <plist version="1.0">
 <dict>
   <key>Label</key>
-  <string>com.mahos.codex-usage-tracker</string>
+  <string>com.mahos.codex-meter</string>
   <key>ProgramArguments</key>
   <array>
     <string>/opt/homebrew/bin/python3</string>

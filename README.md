@@ -1,7 +1,7 @@
-# Codex Usage Tracker
+# Codex Meter
 
-Codex Usage Tracker is a tiny macOS tool that records local Codex usage-limit
-snapshots and renders them as a history graph.
+Codex Meter is a tiny macOS tool that records local Codex usage-limit snapshots
+and renders them as a history graph.
 
 ![Example Codex usage graph](docs/example-usage.png)
 
@@ -14,9 +14,9 @@ usage windows and their exact reset timestamps.
 The collector starts the local Codex app-server, calls
 `account/rateLimits/read`, and writes three local files:
 
-- `~/Documents/Archives/Codex Usage Tracker/snapshots.jsonl`
-- `~/Documents/Archives/Codex Usage Tracker/latest.json`
-- `~/Documents/Archives/Codex Usage Tracker/usage.svg`
+- `~/Documents/Archives/Codex Meter/snapshots.jsonl`
+- `~/Documents/Archives/Codex Meter/latest.json`
+- `~/Documents/Archives/Codex Meter/usage.svg`
 
 The SVG graph plots usage percentage over time. Open it in a browser and hover
 over the dots to see the model, window, collection time, and percent used.
@@ -52,18 +52,18 @@ python3 scripts/collect_codex_usage.py
 ```
 
 The command writes or updates the files under
-`~/Documents/Archives/Codex Usage Tracker/`.
+`~/Documents/Archives/Codex Meter/`.
 
 ## Open The Graph
 
 ```sh
-open -a Safari "$HOME/Documents/Archives/Codex Usage Tracker/usage.svg"
+open -a Safari "$HOME/Documents/Archives/Codex Meter/usage.svg"
 ```
 
 Chrome works too:
 
 ```sh
-open -a "Google Chrome" "$HOME/Documents/Archives/Codex Usage Tracker/usage.svg"
+open -a "Google Chrome" "$HOME/Documents/Archives/Codex Meter/usage.svg"
 ```
 
 Hover directly over the plotted dots for the point details.
@@ -73,35 +73,35 @@ Hover directly over the plotted dots for the point details.
 The included LaunchAgent runs the collector every 5 minutes:
 
 ```sh
-launchd/com.mahos.codex-usage-tracker.plist
+launchd/com.mahos.codex-meter.plist
 ```
 
 Install it from the repository root so the copied plist points at your local
 clone:
 
 ```sh
-PLIST="$HOME/Library/LaunchAgents/com.mahos.codex-usage-tracker.plist"
+PLIST="$HOME/Library/LaunchAgents/com.mahos.codex-meter.plist"
 
 sed "s#__REPO_PATH__#$PWD#g" \
-  launchd/com.mahos.codex-usage-tracker.plist > "$PLIST"
+  launchd/com.mahos.codex-meter.plist > "$PLIST"
 
 launchctl bootstrap "gui/$UID" \
   "$PLIST"
 
-launchctl kickstart -k "gui/$UID/com.mahos.codex-usage-tracker"
+launchctl kickstart -k "gui/$UID/com.mahos.codex-meter"
 ```
 
 To stop it:
 
 ```sh
 launchctl bootout "gui/$UID" \
-  "$HOME/Library/LaunchAgents/com.mahos.codex-usage-tracker.plist"
+  "$HOME/Library/LaunchAgents/com.mahos.codex-meter.plist"
 ```
 
 ## Repository Contents
 
 - `scripts/collect_codex_usage.py`: the collector and SVG renderer.
-- `launchd/com.mahos.codex-usage-tracker.plist`: the 5-minute LaunchAgent.
+- `launchd/com.mahos.codex-meter.plist`: the 5-minute LaunchAgent.
 - `docs/example-usage.png`: example graph shown in this README.
 - `docs/research.md`: notes on the data source and related projects.
 
