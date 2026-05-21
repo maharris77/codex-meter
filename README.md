@@ -19,11 +19,10 @@ Tested on:
 
 ## Disclaimer
 
-This is an unofficial local utility. It calls a local Codex app-server method
-that may change, move, or disappear in future Codex releases. It records your
-own local usage-limit snapshots, including the raw app-server rate-limit result
-with plan type, credit state, limit IDs, window lengths, reset timestamps, and
-used percentages. Review generated files before sharing them.
+This is an unofficial local utility. No warranty at all, not even that it works as intended.
+It calls a local Codex app-server method that may change, move, or disappear in future Codex releases.
+It records your own local usage-limit snapshots, including the raw app-server rate-limit result
+with plan type, credit state, limit IDs, window lengths, reset timestamps, and used percentages.
 
 ## Requirements
 
