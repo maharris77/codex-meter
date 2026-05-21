@@ -31,6 +31,14 @@ over the dots to see the model, window, collection time, and percent used.
 - The local JSON files include plan type, usage percentages, credit state, and
   exact reset timestamps.
 
+## Disclaimer
+
+This is an unofficial local utility. No warranty at all, not even that it works
+as intended. It calls a local Codex app-server method that may change, move, or
+disappear in future Codex releases. It records your own local usage-limit
+snapshots, including the raw app-server rate-limit result with plan type, credit
+state, limit IDs, window lengths, reset timestamps, and used percentages.
+
 ## Requirements
 
 - Codex app installed and signed in.
@@ -96,3 +104,7 @@ launchctl bootout "gui/$UID" \
 - `launchd/com.mahos.codex-usage-tracker.plist`: the 5-minute LaunchAgent.
 - `docs/example-usage.png`: example graph shown in this README.
 - `docs/research.md`: notes on the data source and related projects.
+
+## License
+
+MIT

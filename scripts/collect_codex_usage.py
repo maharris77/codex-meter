@@ -9,7 +9,7 @@ import select
 import subprocess
 import time
 from collections import defaultdict
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any
 
@@ -229,6 +229,19 @@ def format_percent(percent: float) -> str:
     return f"{percent:.1f}%"
 
 
+def day_boundary_epochs(first: int, last: int) -> list[int]:
+    first_local = datetime.fromtimestamp(first, timezone.utc).astimezone()
+    boundary = first_local.replace(hour=0, minute=0, second=0, microsecond=0)
+    if boundary.timestamp() <= first:
+        boundary += timedelta(days=1)
+
+    boundaries: list[int] = []
+    while boundary.timestamp() < last:
+        boundaries.append(int(boundary.timestamp()))
+        boundary += timedelta(days=1)
+    return boundaries
+
+
 def render_svg(snapshots: list[dict[str, Any]]) -> None:
     width = 1240
     height = 560
@@ -278,6 +291,14 @@ def render_svg(snapshots: list[dict[str, Any]]) -> None:
             f'<text x="{left - 12}" y="{y + 4:.2f}" text-anchor="end" '
             'font-family="system-ui, -apple-system, sans-serif" '
             f'font-size="12" fill="#475569">{percent}%</text>'
+        )
+
+    for timestamp in day_boundary_epochs(first, last):
+        x = svg_x(timestamp, first, last, left, plot_width)
+        parts.append(
+            f'<line x1="{x:.2f}" y1="{top}" x2="{x:.2f}" '
+            f'y2="{top + plot_height}" stroke="#cbd5e1" '
+            'stroke-width="1" stroke-dasharray="4 6"/>'
         )
 
     parts.append(
