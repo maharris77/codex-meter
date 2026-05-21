@@ -5,6 +5,9 @@ and renders them as a history graph.
 
 ![Example Codex usage graph](docs/example-usage.png)
 
+The generated SVG is interactive: hover over plotted dots to see the model,
+window, collection time, and percent used.
+
 Codex already shows current usage. This tool keeps a local timeline so you can
 see how each returned limit changes over time, including the 5-hour and 7-day
 usage windows and their exact reset timestamps.
@@ -18,8 +21,7 @@ The collector starts the local Codex app-server, calls
 - `~/Documents/Archives/Codex Meter/latest.json`
 - `~/Documents/Archives/Codex Meter/usage.svg`
 
-The SVG graph plots usage percentage over time. Open it in a browser and hover
-over the dots to see the model, window, collection time, and percent used.
+The SVG graph plots usage percentage over time.
 
 ## Scope
 
