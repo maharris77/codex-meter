@@ -5,8 +5,9 @@ and renders them as a history graph.
 
 ![Example Codex usage graph](docs/example-usage.png)
 
-The generated SVG is interactive: hover over plotted dots to see the model,
-window, collection time, and percent used.
+The generated SVG is interactive: use the view dropdown to switch time windows,
+and hover over plotted dots to see the model, window, collection time, and
+percent used.
 
 Codex already shows current usage. This tool keeps a local timeline so you can
 see how each returned limit changes over time, including the 5-hour and 7-day
@@ -21,7 +22,9 @@ The collector starts the local Codex app-server, calls
 - `~/Documents/Archives/Codex Meter/latest.json`
 - `~/Documents/Archives/Codex Meter/usage.svg`
 
-The SVG graph plots usage percentage over time.
+The SVG graph defaults to the past 7 days and includes view options for common
+time windows. The view dropdown only changes what the graph displays; the
+sampling interval is set by the LaunchAgent installer.
 
 ## Scope
 
@@ -72,26 +75,21 @@ Hover directly over the plotted dots for the point details.
 
 ## Run On Startup
 
-The included LaunchAgent runs the collector every 5 minutes:
+The installer writes and loads a LaunchAgent. With no arguments, it samples
+every 5 minutes:
 
 ```sh
-launchd/com.mahos.codex-meter.plist
+python3 scripts/install_launch_agent.py
 ```
 
-Install it from the repository root so the copied plist points at your local
-clone:
+To choose another sampling interval, pass a positive number and one unit:
 
 ```sh
-PLIST="$HOME/Library/LaunchAgents/com.mahos.codex-meter.plist"
-
-sed "s#__REPO_PATH__#$PWD#g" \
-  launchd/com.mahos.codex-meter.plist > "$PLIST"
-
-launchctl bootstrap "gui/$UID" \
-  "$PLIST"
-
-launchctl kickstart -k "gui/$UID/com.mahos.codex-meter"
+python3 scripts/install_launch_agent.py 15 minutes
+python3 scripts/install_launch_agent.py 1 hour
 ```
+
+Supported units are `minutes`, `hours`, and `days`.
 
 To stop it:
 
@@ -103,7 +101,7 @@ launchctl bootout "gui/$UID" \
 ## Repository Contents
 
 - `scripts/collect_codex_usage.py`: the collector and SVG renderer.
-- `launchd/com.mahos.codex-meter.plist`: the 5-minute LaunchAgent.
+- `scripts/install_launch_agent.py`: the LaunchAgent installer.
 - `docs/example-usage.png`: example graph shown in this README.
 - `docs/research.md`: notes on the data source and related projects.
 

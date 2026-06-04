@@ -9,7 +9,7 @@ import select
 import subprocess
 import time
 from collections import defaultdict
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
@@ -213,12 +213,6 @@ def collect_series(
     return dict(series)
 
 
-def svg_x(timestamp: int, first: int, last: int, left: int, width: int) -> float:
-    if first == last:
-        return left + width / 2
-    return left + ((timestamp - first) / (last - first)) * width
-
-
 def svg_y(percent: float, top: int, height: int) -> float:
     return top + (100 - max(0, min(100, percent))) / 100 * height
 
@@ -229,25 +223,20 @@ def format_percent(percent: float) -> str:
     return f"{percent:.1f}%"
 
 
-def day_boundary_epochs(first: int, last: int) -> list[int]:
-    first_local = datetime.fromtimestamp(first, timezone.utc).astimezone()
-    boundary = first_local.replace(hour=0, minute=0, second=0, microsecond=0)
-    if boundary.timestamp() <= first:
-        boundary += timedelta(days=1)
-
-    boundaries: list[int] = []
-    while boundary.timestamp() < last:
-        boundaries.append(int(boundary.timestamp()))
-        boundary += timedelta(days=1)
-    return boundaries
+def cdata_script(script: str) -> str:
+    return (
+        "<script><![CDATA[\n"
+        + script.replace("]]>", "]]]]><![CDATA[>")
+        + "\n]]></script>"
+    )
 
 
 def render_svg(snapshots: list[dict[str, Any]]) -> None:
     width = 1240
-    height = 560
+    height = 620
     left = 78
     right = 360
-    top = 72
+    top = 132
     bottom = 86
     plot_width = width - left - right
     plot_height = height - top - bottom
@@ -266,17 +255,247 @@ def render_svg(snapshots: list[dict[str, Any]]) -> None:
         "#15803d",
         "#c2410c",
     ]
+    series_data: list[dict[str, Any]] = []
+    for index, (label, points) in enumerate(sorted(collect_series(snapshots).items())):
+        series_data.append(
+            {
+                "label": label,
+                "color": palette[index % len(palette)],
+                "points": [
+                    {
+                        "timestamp": timestamp,
+                        "percent": percent,
+                        "percentText": format_percent(percent),
+                        "localTime": format_epoch_local(timestamp),
+                    }
+                    for timestamp, percent in points
+                ],
+            }
+        )
+    data_json = json.dumps(
+        {
+            "first": first,
+            "last": last,
+            "left": left,
+            "top": top,
+            "plotWidth": plot_width,
+            "plotHeight": plot_height,
+            "series": series_data,
+        },
+        separators=(",", ":"),
+    )
+    script = """
+const usageData = __USAGE_DATA__;
+const svgNS = "http://www.w3.org/2000/svg";
+const presetSeconds = {
+  five_hours: 5 * 60 * 60,
+  one_day: 24 * 60 * 60,
+  seven_days: 7 * 24 * 60 * 60,
+  thirty_days: 30 * 24 * 60 * 60
+};
+const formatter = new Intl.DateTimeFormat(undefined, {
+  year: "numeric",
+  month: "2-digit",
+  day: "2-digit",
+  hour: "2-digit",
+  minute: "2-digit",
+  hour12: false,
+  timeZoneName: "short"
+});
+
+function svgElement(name, attrs = {}) {
+  const element = document.createElementNS(svgNS, name);
+  for (const [key, value] of Object.entries(attrs)) {
+    element.setAttribute(key, String(value));
+  }
+  return element;
+}
+
+function clearChildren(element) {
+  while (element.firstChild) {
+    element.removeChild(element.firstChild);
+  }
+}
+
+function formatDate(timestamp) {
+  return formatter.format(new Date(timestamp * 1000));
+}
+
+function formatPercent(value) {
+  return Number.isInteger(value) ? `${value}%` : `${value.toFixed(1)}%`;
+}
+
+function selectedIntervalSeconds() {
+  const preset = document.getElementById("view-preset").value;
+  if (preset === "all") {
+    return null;
+  }
+  return presetSeconds[preset];
+}
+
+function visibleRange() {
+  const end = usageData.last;
+  const interval = selectedIntervalSeconds();
+  let start = interval === null ? usageData.first : end - interval;
+  if (start >= end) {
+    start = end - 1;
+  }
+  return { start, end };
+}
+
+function xPosition(timestamp, range) {
+  const span = range.end - range.start;
+  return usageData.left + ((timestamp - range.start) / span) * usageData.plotWidth;
+}
+
+function yPosition(percent) {
+  const clamped = Math.max(0, Math.min(100, percent));
+  return usageData.top + ((100 - clamped) / 100) * usageData.plotHeight;
+}
+
+function dayBoundaryTimestamps(range) {
+  const boundary = new Date(range.start * 1000);
+  boundary.setHours(0, 0, 0, 0);
+  if (boundary.getTime() / 1000 <= range.start) {
+    boundary.setDate(boundary.getDate() + 1);
+  }
+
+  const boundaries = [];
+  while (boundary.getTime() / 1000 < range.end) {
+    boundaries.push(Math.floor(boundary.getTime() / 1000));
+    boundary.setDate(boundary.getDate() + 1);
+  }
+  return boundaries;
+}
+
+function renderDayBoundaries(range) {
+  const layer = document.getElementById("day-grid");
+  clearChildren(layer);
+  for (const timestamp of dayBoundaryTimestamps(range)) {
+    const x = xPosition(timestamp, range);
+    layer.appendChild(svgElement("line", {
+      x1: x.toFixed(2),
+      y1: usageData.top,
+      x2: x.toFixed(2),
+      y2: usageData.top + usageData.plotHeight,
+      stroke: "#cbd5e1",
+      "stroke-width": 1,
+      "stroke-dasharray": "4 6"
+    }));
+  }
+}
+
+function renderSeries(range) {
+  const seriesLayer = document.getElementById("series-layer");
+  const legendLayer = document.getElementById("legend-layer");
+  const emptyMessage = document.getElementById("empty-message");
+  clearChildren(seriesLayer);
+  clearChildren(legendLayer);
+  let visiblePointCount = 0;
+
+  usageData.series.forEach((series, index) => {
+    const visiblePoints = series.points.filter(
+      (point) => point.timestamp >= range.start && point.timestamp <= range.end
+    );
+    visiblePointCount += visiblePoints.length;
+    if (visiblePoints.length > 1) {
+      const pathData = visiblePoints.map((point, pointIndex) => {
+        const command = pointIndex === 0 ? "M" : "L";
+        return `${command} ${xPosition(point.timestamp, range).toFixed(2)} ${yPosition(point.percent).toFixed(2)}`;
+      }).join(" ");
+      seriesLayer.appendChild(svgElement("path", {
+        d: pathData,
+        fill: "none",
+        stroke: series.color,
+        "stroke-width": 2.5
+      }));
+    }
+
+    for (const point of visiblePoints) {
+      const circle = svgElement("circle", {
+        class: "usage-point",
+        cx: xPosition(point.timestamp, range).toFixed(2),
+        cy: yPosition(point.percent).toFixed(2),
+        r: 4,
+        fill: series.color
+      });
+      const title = svgElement("title");
+      title.textContent = `${series.label} - ${point.localTime} - ${point.percentText || formatPercent(point.percent)} used`;
+      circle.appendChild(title);
+      seriesLayer.appendChild(circle);
+    }
+
+    const legendY = usageData.top + 18 + index * 24;
+    const opacity = visiblePoints.length ? 1 : 0.35;
+    legendLayer.appendChild(svgElement("line", {
+      x1: usageData.left + usageData.plotWidth + 28,
+      y1: legendY - 4,
+      x2: usageData.left + usageData.plotWidth + 48,
+      y2: legendY - 4,
+      stroke: series.color,
+      "stroke-width": 3,
+      opacity
+    }));
+    const label = svgElement("text", {
+      x: usageData.left + usageData.plotWidth + 56,
+      y: legendY,
+      "font-family": "system-ui, -apple-system, sans-serif",
+      "font-size": 12,
+      fill: "#0f172a",
+      opacity
+    });
+    label.textContent = series.label;
+    legendLayer.appendChild(label);
+  });
+
+  emptyMessage.setAttribute("display", visiblePointCount ? "none" : "block");
+}
+
+function render() {
+  const range = visibleRange();
+  document.getElementById("start-label").textContent = formatDate(range.start);
+  document.getElementById("end-label").textContent = formatDate(range.end);
+  document.getElementById("range-label").textContent = `${formatDate(range.start)} to ${formatDate(range.end)}`;
+  renderDayBoundaries(range);
+  renderSeries(range);
+}
+
+document.getElementById("view-preset").addEventListener("change", render);
+render();
+""".replace("__USAGE_DATA__", data_json)
 
     parts = [
         '<svg xmlns="http://www.w3.org/2000/svg" '
         f'width="{width}" height="{height}" viewBox="0 0 {width} {height}">',
         '<rect width="100%" height="100%" fill="#f8fafc"/>',
-        '<style>.usage-point{cursor:crosshair}.usage-point:hover{stroke:#0f172a;'
-        'stroke-width:2}</style>',
+        "<style>"
+        ".usage-point{cursor:crosshair}.usage-point:hover{stroke:#0f172a;stroke-width:2}"
+        ".usage-control-row{display:flex;align-items:center;gap:8px;"
+        "font-family:system-ui,-apple-system,sans-serif;font-size:13px;color:#334155}"
+        ".usage-control-row label{display:flex;align-items:center;gap:5px}"
+        ".usage-control-row select{height:28px;"
+        "box-sizing:border-box;border:1px solid #cbd5e1;border-radius:4px;"
+        "background:#fff;color:#0f172a;padding:3px 6px;font:inherit}"
+        "</style>",
         '<text x="32" y="34" font-family="system-ui, -apple-system, sans-serif" '
         'font-size="22" font-weight="700" fill="#0f172a">Codex usage limits</text>',
         '<text x="32" y="58" font-family="system-ui, -apple-system, sans-serif" '
         f'font-size="13" fill="#475569">Last collected {html.escape(last_collected)}</text>',
+        '<foreignObject x="32" y="72" width="760" height="42">',
+        '<div xmlns="http://www.w3.org/1999/xhtml" class="usage-control-row">',
+        '<label>View '
+        '<select id="view-preset">'
+        '<option value="five_hours">Last 5 hours</option>'
+        '<option value="one_day">Last 24 hours</option>'
+        '<option value="seven_days" selected="selected">Last 7 days</option>'
+        '<option value="thirty_days">Last 30 days</option>'
+        '<option value="all">All data</option>'
+        "</select></label>",
+        "</div>",
+        "</foreignObject>",
+        '<text id="range-label" x="32" y="119" '
+        'font-family="system-ui, -apple-system, sans-serif" '
+        'font-size="12" fill="#475569"></text>',
         f'<rect x="{left}" y="{top}" width="{plot_width}" height="{plot_height}" '
         'fill="#ffffff" stroke="#cbd5e1"/>',
     ]
@@ -293,68 +512,29 @@ def render_svg(snapshots: list[dict[str, Any]]) -> None:
             f'font-size="12" fill="#475569">{percent}%</text>'
         )
 
-    for timestamp in day_boundary_epochs(first, last):
-        x = svg_x(timestamp, first, last, left, plot_width)
-        parts.append(
-            f'<line x1="{x:.2f}" y1="{top}" x2="{x:.2f}" '
-            f'y2="{top + plot_height}" stroke="#cbd5e1" '
-            'stroke-width="1" stroke-dasharray="4 6"/>'
-        )
+    parts.append('<g id="day-grid"></g>')
 
     parts.append(
-        f'<text x="{left}" y="{height - 36}" '
+        f'<text id="start-label" x="{left}" y="{height - 36}" '
         'font-family="system-ui, -apple-system, sans-serif" '
-        f'font-size="12" fill="#475569">{html.escape(format_epoch_local(first))}</text>'
+        'font-size="12" fill="#475569"></text>'
     )
     parts.append(
-        f'<text x="{left + plot_width}" y="{height - 36}" text-anchor="end" '
+        f'<text id="end-label" x="{left + plot_width}" y="{height - 36}" text-anchor="end" '
         'font-family="system-ui, -apple-system, sans-serif" '
-        f'font-size="12" fill="#475569">{html.escape(format_epoch_local(last))}</text>'
+        'font-size="12" fill="#475569"></text>'
     )
+    parts.append(
+        f'<text id="empty-message" x="{left + plot_width / 2:.2f}" '
+        f'y="{top + plot_height / 2:.2f}" text-anchor="middle" '
+        'font-family="system-ui, -apple-system, sans-serif" '
+        'font-size="13" fill="#64748b" display="none">'
+        "No snapshots in selected window</text>"
+    )
+    parts.append('<g id="series-layer"></g>')
+    parts.append('<g id="legend-layer"></g>')
 
-    series = collect_series(snapshots)
-    for index, (label, points) in enumerate(sorted(series.items())):
-        color = palette[index % len(palette)]
-        coordinates = [
-            (
-                timestamp,
-                percent,
-                svg_x(timestamp, first, last, left, plot_width),
-                svg_y(percent, top, plot_height),
-            )
-            for timestamp, percent in points
-        ]
-        if len(coordinates) > 1:
-            path_data = " ".join(
-                f"{'M' if point_index == 0 else 'L'} {x:.2f} {y:.2f}"
-                for point_index, (_, _, x, y) in enumerate(coordinates)
-            )
-            parts.append(
-                f'<path d="{path_data}" fill="none" stroke="{color}" '
-                'stroke-width="2.5"/>'
-            )
-        for timestamp, percent, x, y in coordinates:
-            title = (
-                f"{label} - {format_epoch_local(timestamp)} - "
-                f"{format_percent(percent)} used"
-            )
-            parts.append(
-                f'<circle class="usage-point" cx="{x:.2f}" cy="{y:.2f}" r="4" '
-                f'fill="{color}"><title>{html.escape(title)}</title></circle>'
-            )
-
-        legend_y = top + 18 + index * 24
-        parts.append(
-            f'<line x1="{left + plot_width + 28}" y1="{legend_y - 4}" '
-            f'x2="{left + plot_width + 48}" y2="{legend_y - 4}" '
-            f'stroke="{color}" stroke-width="3"/>'
-        )
-        parts.append(
-            f'<text x="{left + plot_width + 56}" y="{legend_y}" '
-            'font-family="system-ui, -apple-system, sans-serif" '
-            f'font-size="12" fill="#0f172a">{html.escape(label)}</text>'
-        )
-
+    parts.append(cdata_script(script))
     parts.append("</svg>\n")
     SVG_PATH.write_text("\n".join(parts), "utf-8")
 
