@@ -20,9 +20,14 @@ LATEST_PATH = OUTPUT_DIR / "latest.json"
 SVG_PATH = OUTPUT_DIR / "usage.svg"
 READ_TIMEOUT_SECONDS = 30
 CODEX_BIN = "/opt/homebrew/bin/codex"
+PROJECT_VERSION = "0.2.0"
 WINDOW_LABELS_BY_DURATION_MINS = {
     300: "5-hour window",
     10080: "7-day window",
+}
+WINDOW_LABELS_BY_NAME = {
+    "primary": "5-hour window",
+    "secondary": "7-day window",
 }
 
 
@@ -117,7 +122,7 @@ def read_codex_rate_limits() -> dict[str, Any]:
                     "clientInfo": {
                         "name": "codex-meter",
                         "title": "Codex Meter",
-                        "version": "0.1.0",
+                        "version": PROJECT_VERSION,
                     },
                     "capabilities": {"experimentalApi": True},
                 },
@@ -175,9 +180,12 @@ def limit_snapshots(result: dict[str, Any]) -> dict[str, Any]:
     return by_limit_id
 
 
-def window_label(window: dict[str, Any]) -> str:
-    duration_minutes = int(window["windowDurationMins"])
-    return WINDOW_LABELS_BY_DURATION_MINS[duration_minutes]
+def window_label(window_name: str, window: dict[str, Any]) -> str:
+    duration = window.get("windowDurationMins")
+    if duration is not None:
+        duration_minutes = int(duration)
+        return WINDOW_LABELS_BY_DURATION_MINS[duration_minutes]
+    return WINDOW_LABELS_BY_NAME[window_name]
 
 
 def display_limit_name(limit_id: str, limit_snapshot: dict[str, Any]) -> str:
@@ -189,8 +197,13 @@ def display_limit_name(limit_id: str, limit_snapshot: dict[str, Any]) -> str:
     return limit_id
 
 
-def series_label(limit_id: str, limit_snapshot: dict[str, Any], window: dict[str, Any]) -> str:
-    return f"{display_limit_name(limit_id, limit_snapshot)} {window_label(window)}"
+def series_label(
+    limit_id: str,
+    limit_snapshot: dict[str, Any],
+    window_name: str,
+    window: dict[str, Any],
+) -> str:
+    return f"{display_limit_name(limit_id, limit_snapshot)} {window_label(window_name, window)}"
 
 
 def collect_series(
@@ -208,7 +221,7 @@ def collect_series(
                     continue
                 used_percent = window.get("usedPercent")
                 if isinstance(used_percent, (int, float)):
-                    label = series_label(limit_id, limit_snapshot, window)
+                    label = series_label(limit_id, limit_snapshot, window_name, window)
                     series[label].append((collected_at, float(used_percent)))
     return dict(series)
 
@@ -552,7 +565,7 @@ def summary_lines(result: dict[str, Any]) -> list[str]:
                 continue
             used_percent = window.get("usedPercent")
             reset = format_epoch_local(window.get("resetsAt"))
-            label = window_label(window)
+            label = window_label(window_name, window)
             lines.append(
                 f"{limit_name} {label}: {used_percent}% used; resets {reset}"
             )

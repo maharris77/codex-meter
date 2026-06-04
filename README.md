@@ -91,6 +91,10 @@ python3 scripts/install_launch_agent.py 1 hour
 
 Supported units are `minutes`, `hours`, and `days`.
 
+If you used the old `codex-usage-tracker` name, the installer migrates existing
+snapshots from `~/Documents/Archives/Codex Usage Tracker/` into
+`~/Documents/Archives/Codex Meter/` before loading the new LaunchAgent.
+
 To stop it:
 
 ```sh
@@ -102,6 +106,7 @@ launchctl bootout "gui/$UID" \
 
 - `scripts/collect_codex_usage.py`: the collector and SVG renderer.
 - `scripts/install_launch_agent.py`: the LaunchAgent installer.
+- `scripts/migrate_to_codex_meter.py`: the old-name data migration.
 - `docs/example-usage.png`: example graph shown in this README.
 - `docs/research.md`: notes on the data source and related projects.
 

@@ -9,6 +9,8 @@ import subprocess
 import sys
 from pathlib import Path
 
+import migrate_to_codex_meter
+
 
 LABEL = "com.mahos.codex-meter"
 ROOT = Path(__file__).resolve().parents[1]
@@ -80,6 +82,8 @@ def main() -> None:
         raise SystemExit("LaunchAgent installation requires macOS")
 
     interval_seconds, interval_label = parse_interval(sys.argv[1:])
+    migration = migrate_to_codex_meter.migrate_data()
+    removed_labels = migrate_to_codex_meter.remove_legacy_launch_agents()
     write_plist(interval_seconds)
     subprocess.run(
         ["launchctl", "bootout", f"gui/{os.getuid()}", str(PLIST_PATH)],
@@ -96,6 +100,13 @@ def main() -> None:
     print(f"Wrote {PLIST_PATH}")
     print(f"Loaded {launch_agent_target()}")
     print(f"Sampling every {interval_label}")
+    if migration["snapshot_count"]:
+        print(
+            "Migrated "
+            f"{migration['snapshot_count']} snapshots to {migrate_to_codex_meter.NEW_DIR}"
+        )
+    for label in removed_labels:
+        print(f"Removed legacy LaunchAgent {label}")
 
 
 if __name__ == "__main__":
