@@ -17,6 +17,7 @@ ROOT = Path(__file__).resolve().parents[1]
 COLLECTOR = ROOT / "scripts" / "collect_codex_usage.py"
 OUTPUT_DIR = Path.home() / "Documents" / "Archives" / "Codex Meter"
 PLIST_PATH = Path.home() / "Library" / "LaunchAgents" / f"{LABEL}.plist"
+PYTHON_BIN = "/opt/homebrew/opt/python@3.13/bin/python3.13"
 DEFAULT_AMOUNT = 5
 DEFAULT_UNIT = "minutes"
 UNIT_SECONDS = {
@@ -65,7 +66,7 @@ def launch_agent_target() -> str:
 def build_plist(interval_seconds: int) -> dict[str, object]:
     return {
         "Label": LABEL,
-        "ProgramArguments": ["/usr/bin/python3", str(COLLECTOR)],
+        "ProgramArguments": [PYTHON_BIN, str(COLLECTOR)],
         "RunAtLoad": True,
         "StartInterval": interval_seconds,
         "WorkingDirectory": str(ROOT),

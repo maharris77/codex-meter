@@ -48,7 +48,7 @@ state, limit IDs, window lengths, reset timestamps, and used percentages.
 
 - Codex app installed and signed in.
 - Codex CLI at `/opt/homebrew/bin/codex`.
-- The macOS system Python at `/usr/bin/python3`.
+- Homebrew Python at `/opt/homebrew/opt/python@3.13/bin/python3.13`.
 
 ## Run Once
 
