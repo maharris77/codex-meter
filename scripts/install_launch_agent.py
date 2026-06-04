@@ -65,7 +65,7 @@ def launch_agent_target() -> str:
 def build_plist(interval_seconds: int) -> dict[str, object]:
     return {
         "Label": LABEL,
-        "ProgramArguments": ["/opt/homebrew/bin/python3", str(COLLECTOR)],
+        "ProgramArguments": ["/usr/bin/python3", str(COLLECTOR)],
         "RunAtLoad": True,
         "StartInterval": interval_seconds,
         "WorkingDirectory": str(ROOT),
