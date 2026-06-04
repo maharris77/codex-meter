@@ -18,8 +18,8 @@ OLD_SNAPSHOTS_PATH = OLD_DIR / "snapshots.jsonl"
 NEW_SNAPSHOTS_PATH = collect_codex_usage.SNAPSHOTS_PATH
 NEW_LATEST_PATH = collect_codex_usage.LATEST_PATH
 LEGACY_LABELS = (
-    "com.codex-usage-tracker",
     "com.mahos.codex-usage-tracker",
+    "com.mahos.codex-meter",
 )
 
 

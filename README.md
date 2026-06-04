@@ -99,8 +99,12 @@ To stop it:
 
 ```sh
 launchctl bootout "gui/$UID" \
-  "$HOME/Library/LaunchAgents/com.mahos.codex-meter.plist"
+  "$HOME/Library/LaunchAgents/com.codex-usage-tracker.plist"
 ```
+
+The LaunchAgent keeps the existing `com.codex-usage-tracker` service label so
+macOS preserves background access to the local Documents archive. The project,
+client name, and output archive use the Codex Meter name.
 
 ## Repository Contents
 

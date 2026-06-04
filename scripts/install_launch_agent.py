@@ -12,7 +12,7 @@ from pathlib import Path
 import migrate_to_codex_meter
 
 
-LABEL = "com.mahos.codex-meter"
+LABEL = "com.codex-usage-tracker"
 ROOT = Path(__file__).resolve().parents[1]
 COLLECTOR = ROOT / "scripts" / "collect_codex_usage.py"
 OUTPUT_DIR = Path.home() / "Documents" / "Archives" / "Codex Meter"
