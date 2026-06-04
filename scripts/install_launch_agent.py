@@ -15,6 +15,7 @@ import migrate_to_codex_meter
 LABEL = "com.mahos.codex-meter"
 ROOT = Path(__file__).resolve().parents[1]
 COLLECTOR = ROOT / "scripts" / "collect_codex_usage.py"
+OUTPUT_DIR = Path.home() / "Documents" / "Archives" / "Codex Meter"
 PLIST_PATH = Path.home() / "Library" / "LaunchAgents" / f"{LABEL}.plist"
 DEFAULT_AMOUNT = 5
 DEFAULT_UNIT = "minutes"
@@ -68,10 +69,13 @@ def build_plist(interval_seconds: int) -> dict[str, object]:
         "RunAtLoad": True,
         "StartInterval": interval_seconds,
         "WorkingDirectory": str(ROOT),
+        "StandardOutPath": str(OUTPUT_DIR / "launchd.out.log"),
+        "StandardErrorPath": str(OUTPUT_DIR / "launchd.err.log"),
     }
 
 
 def write_plist(interval_seconds: int) -> None:
+    OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
     PLIST_PATH.parent.mkdir(parents=True, exist_ok=True)
     with PLIST_PATH.open("wb") as handle:
         plistlib.dump(build_plist(interval_seconds), handle, sort_keys=False)

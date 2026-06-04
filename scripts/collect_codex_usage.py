@@ -7,6 +7,7 @@ import html
 import json
 import select
 import subprocess
+import sys
 import time
 from collections import defaultdict
 from datetime import datetime, timezone
@@ -578,11 +579,12 @@ def main() -> None:
     append_snapshot(snapshot)
     render_svg(load_snapshots())
 
-    print(f"Wrote {SNAPSHOTS_PATH}")
-    print(f"Wrote {LATEST_PATH}")
-    print(f"Wrote {SVG_PATH}")
-    for line in summary_lines(result):
-        print(line)
+    if sys.stdout.isatty():
+        print(f"Wrote {SNAPSHOTS_PATH}")
+        print(f"Wrote {LATEST_PATH}")
+        print(f"Wrote {SVG_PATH}")
+        for line in summary_lines(result):
+            print(line)
 
 
 if __name__ == "__main__":
