@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import json
 import os
+import shutil
 import subprocess
 from pathlib import Path
 from typing import Any
@@ -51,6 +52,23 @@ def merged_snapshots() -> list[dict[str, Any]]:
     return [snapshots[key] for key in sorted(snapshots)]
 
 
+def prepare_output_dir() -> None:
+    if not OLD_DIR.exists():
+        NEW_DIR.mkdir(parents=True, exist_ok=True)
+        return
+
+    if NEW_DIR.is_symlink():
+        if NEW_DIR.resolve() == OLD_DIR.resolve():
+            return
+        NEW_DIR.unlink()
+    elif NEW_DIR.exists():
+        if NEW_DIR.resolve() == OLD_DIR.resolve():
+            return
+        shutil.rmtree(NEW_DIR)
+
+    NEW_DIR.symlink_to(OLD_DIR, target_is_directory=True)
+
+
 def write_jsonl(path: Path, rows: list[dict[str, Any]]) -> None:
     with path.open("w", encoding="utf-8") as handle:
         for row in rows:
@@ -60,10 +78,10 @@ def write_jsonl(path: Path, rows: list[dict[str, Any]]) -> None:
 
 def migrate_data() -> dict[str, int]:
     rows = merged_snapshots()
+    prepare_output_dir()
     if not rows:
         return {"snapshot_count": 0}
 
-    NEW_DIR.mkdir(parents=True, exist_ok=True)
     write_jsonl(NEW_SNAPSHOTS_PATH, rows)
     NEW_LATEST_PATH.write_text(
         json.dumps(rows[-1], indent=2, sort_keys=True),
