@@ -94,8 +94,8 @@ Supported units are `minutes`, `hours`, and `days`.
 If you used the old `codex-usage-tracker` name, the installer migrates existing
 snapshots from `~/Documents/Archives/Codex Usage Tracker/` into
 `~/Documents/Archives/Codex Meter/` before loading the new LaunchAgent.
-For existing installs, the new archive path points at the historical archive
-directory so local history and macOS background file access are preserved.
+The historical archive directory is left in place after the new archive is
+written.
 
 To stop it:
 

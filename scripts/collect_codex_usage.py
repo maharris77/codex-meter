@@ -21,7 +21,7 @@ LATEST_PATH = OUTPUT_DIR / "latest.json"
 SVG_PATH = OUTPUT_DIR / "usage.svg"
 READ_TIMEOUT_SECONDS = 30
 CODEX_BIN = "/opt/homebrew/bin/codex"
-PROJECT_VERSION = "0.2.1"
+PROJECT_VERSION = "0.2.2"
 WINDOW_LABELS_BY_DURATION_MINS = {
     300: "5-hour window",
     10080: "7-day window",

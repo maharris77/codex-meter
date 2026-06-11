@@ -5,7 +5,6 @@ from __future__ import annotations
 
 import json
 import os
-import shutil
 import subprocess
 from pathlib import Path
 from typing import Any
@@ -53,20 +52,10 @@ def merged_snapshots() -> list[dict[str, Any]]:
 
 
 def prepare_output_dir() -> None:
-    if not OLD_DIR.exists():
-        NEW_DIR.mkdir(parents=True, exist_ok=True)
-        return
-
     if NEW_DIR.is_symlink():
-        if NEW_DIR.resolve() == OLD_DIR.resolve():
-            return
         NEW_DIR.unlink()
-    elif NEW_DIR.exists():
-        if NEW_DIR.resolve() == OLD_DIR.resolve():
-            return
-        shutil.rmtree(NEW_DIR)
 
-    NEW_DIR.symlink_to(OLD_DIR, target_is_directory=True)
+    NEW_DIR.mkdir(parents=True, exist_ok=True)
 
 
 def write_jsonl(path: Path, rows: list[dict[str, Any]]) -> None:
