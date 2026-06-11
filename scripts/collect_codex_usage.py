@@ -480,7 +480,9 @@ render();
 
     parts = [
         '<svg xmlns="http://www.w3.org/2000/svg" '
-        f'width="{width}" height="{height}" viewBox="0 0 {width} {height}">',
+        f'width="100vw" height="100vh" viewBox="0 0 {width} {height}" '
+        'preserveAspectRatio="xMidYMid meet" '
+        'style="width:100vw;height:100vh;display:block;background:#f8fafc">',
         '<rect width="100%" height="100%" fill="#f8fafc"/>',
         "<style>"
         ".usage-point{cursor:crosshair}.usage-point:hover{stroke:#0f172a;stroke-width:2}"
