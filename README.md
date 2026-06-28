@@ -16,11 +16,17 @@ usage windows and their exact reset timestamps.
 ## What It Does
 
 The collector starts the local Codex app-server, calls
-`account/rateLimits/read`, and writes three local files:
+`account/rateLimits/read`, and writes local files:
 
 - `~/Documents/Archives/Codex Meter/snapshots.jsonl`
 - `~/Documents/Archives/Codex Meter/latest.json`
 - `~/Documents/Archives/Codex Meter/usage.svg`
+
+When the app-server response includes reset credits, the collector also watches
+`rateLimitResetCredits.availableCount`. If that count changes from the previous
+snapshot, Codex Meter appends an event to
+`~/Documents/Archives/Codex Meter/reset_credit_events.jsonl` and sends a macOS
+notification.
 
 The SVG graph defaults to the past 7 days and includes view options for common
 time windows. The view dropdown only changes what the graph displays; the
@@ -35,6 +41,8 @@ sampling interval is set by the LaunchAgent installer.
   OpenAI analytics or billing history.
 - The local JSON files include plan type, usage percentages, credit state, and
   exact reset timestamps.
+- Reset-credit alerts depend on the same app-server response. If Codex stops
+  returning `rateLimitResetCredits.availableCount`, no alert is emitted.
 
 ## Disclaimer
 
@@ -58,6 +66,9 @@ python3 scripts/collect_codex_usage.py
 
 The command writes or updates the files under
 `~/Documents/Archives/Codex Meter/`.
+
+When the reset-credit count changes, Codex Meter also writes
+`~/Documents/Archives/Codex Meter/reset_credit_events.jsonl`.
 
 ## Open The Graph
 

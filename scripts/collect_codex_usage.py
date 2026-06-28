@@ -19,9 +19,10 @@ OUTPUT_DIR = Path.home() / "Documents" / "Archives" / "Codex Meter"
 SNAPSHOTS_PATH = OUTPUT_DIR / "snapshots.jsonl"
 LATEST_PATH = OUTPUT_DIR / "latest.json"
 SVG_PATH = OUTPUT_DIR / "usage.svg"
+RESET_CREDIT_EVENTS_PATH = OUTPUT_DIR / "reset_credit_events.jsonl"
 READ_TIMEOUT_SECONDS = 30
 CODEX_BIN = "/opt/homebrew/bin/codex"
-PROJECT_VERSION = "0.2.2"
+PROJECT_VERSION = "0.2.3"
 WINDOW_LABELS_BY_DURATION_MINS = {
     300: "5-hour window",
     10080: "7-day window",
@@ -164,6 +165,76 @@ def append_snapshot(snapshot: dict[str, Any]) -> None:
         handle.write(json.dumps(snapshot, separators=(",", ":"), sort_keys=True))
         handle.write("\n")
     LATEST_PATH.write_text(json.dumps(snapshot, indent=2, sort_keys=True), "utf-8")
+
+
+def load_latest_snapshot() -> dict[str, Any] | None:
+    if not LATEST_PATH.exists():
+        return None
+    return json.loads(LATEST_PATH.read_text("utf-8"))
+
+
+def reset_credit_count(snapshot: dict[str, Any] | None) -> int | None:
+    if snapshot is None:
+        return None
+    reset_credits = snapshot.get("result", {}).get("rateLimitResetCredits")
+    if not isinstance(reset_credits, dict):
+        return None
+    available_count = reset_credits.get("availableCount")
+    if isinstance(available_count, int):
+        return available_count
+    return None
+
+
+def record_reset_credit_change(
+    previous_snapshot: dict[str, Any],
+    current_snapshot: dict[str, Any],
+    previous_count: int,
+    current_count: int,
+) -> None:
+    event = {
+        "changedAt": current_snapshot["collectedAt"],
+        "changedAtEpoch": current_snapshot["collectedAtEpoch"],
+        "previousCollectedAt": previous_snapshot["collectedAt"],
+        "previousAvailableCount": previous_count,
+        "currentAvailableCount": current_count,
+    }
+    with RESET_CREDIT_EVENTS_PATH.open("a", encoding="utf-8") as handle:
+        handle.write(json.dumps(event, separators=(",", ":"), sort_keys=True))
+        handle.write("\n")
+
+    direction = "increased" if current_count > previous_count else "decreased"
+    subprocess.run(
+        [
+            "/usr/bin/osascript",
+            "-e",
+            (
+                'display notification "'
+                f"Reset credits {direction}: {previous_count} to {current_count}"
+                '" with title "Codex Meter"'
+            ),
+        ],
+        check=False,
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+    )
+
+
+def alert_if_reset_credit_count_changed(
+    previous_snapshot: dict[str, Any] | None,
+    current_snapshot: dict[str, Any],
+) -> None:
+    previous_count = reset_credit_count(previous_snapshot)
+    current_count = reset_credit_count(current_snapshot)
+    if previous_snapshot is None or previous_count is None or current_count is None:
+        return
+    if previous_count == current_count:
+        return
+    record_reset_credit_change(
+        previous_snapshot,
+        current_snapshot,
+        previous_count,
+        current_count,
+    )
 
 
 def load_snapshots() -> list[dict[str, Any]]:
@@ -560,6 +631,11 @@ def summary_lines(result: dict[str, Any]) -> list[str]:
     primary = result["rateLimits"]
     plan_type = primary.get("planType") or "unknown"
     lines.append(f"Plan: {plan_type}")
+    reset_credits = result.get("rateLimitResetCredits")
+    if isinstance(reset_credits, dict):
+        available_count = reset_credits.get("availableCount")
+        if isinstance(available_count, int):
+            lines.append(f"Reset credits available: {available_count}")
     for limit_id, limit_snapshot in sorted(limit_snapshots(result).items()):
         limit_name = display_limit_name(limit_id, limit_snapshot)
         for window_name in ("primary", "secondary"):
@@ -576,9 +652,11 @@ def summary_lines(result: dict[str, Any]) -> list[str]:
 
 
 def main() -> None:
+    previous_snapshot = load_latest_snapshot()
     result = read_codex_rate_limits()
     snapshot = snapshot_limits(result)
     append_snapshot(snapshot)
+    alert_if_reset_credit_count_changed(previous_snapshot, snapshot)
     render_svg(load_snapshots())
 
     if sys.stdout.isatty():
