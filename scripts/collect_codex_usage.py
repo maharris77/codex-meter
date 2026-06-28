@@ -298,6 +298,23 @@ def collect_series(
     return dict(series)
 
 
+def collect_reset_credit_points(snapshots: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    points: list[dict[str, Any]] = []
+    for snapshot in snapshots:
+        count = reset_credit_count(snapshot)
+        if count is None:
+            continue
+        timestamp = int(snapshot["collectedAtEpoch"])
+        points.append(
+            {
+                "timestamp": timestamp,
+                "count": count,
+                "localTime": format_epoch_local(timestamp),
+            }
+        )
+    return points
+
+
 def svg_y(percent: float, top: int, height: int) -> float:
     return top + (100 - max(0, min(100, percent))) / 100 * height
 
@@ -318,13 +335,14 @@ def cdata_script(script: str) -> str:
 
 def render_svg(snapshots: list[dict[str, Any]]) -> None:
     width = 1240
-    height = 620
+    height = 720
     left = 78
     right = 360
     top = 132
-    bottom = 86
     plot_width = width - left - right
-    plot_height = height - top - bottom
+    plot_height = 360
+    reset_top = 540
+    reset_height = 70
     first = int(snapshots[0]["collectedAtEpoch"])
     last = int(snapshots[-1]["collectedAtEpoch"])
     last_collected = snapshots[-1]["collectedAt"]
@@ -363,6 +381,10 @@ def render_svg(snapshots: list[dict[str, Any]]) -> None:
                 ],
             }
         )
+    reset_credit_points = collect_reset_credit_points(snapshots)
+    reset_credit_max_count = max(
+        [1] + [int(point["count"]) for point in reset_credit_points]
+    )
     data_json = json.dumps(
         {
             "first": first,
@@ -371,6 +393,12 @@ def render_svg(snapshots: list[dict[str, Any]]) -> None:
             "top": top,
             "plotWidth": plot_width,
             "plotHeight": plot_height,
+            "resetTop": reset_top,
+            "resetHeight": reset_height,
+            "resetCredit": {
+                "maxCount": reset_credit_max_count,
+                "points": reset_credit_points,
+            },
             "series": series_data,
         },
         separators=(",", ":"),
@@ -444,6 +472,29 @@ function yPosition(percent) {
   return usageData.top + ((100 - clamped) / 100) * usageData.plotHeight;
 }
 
+function resetYPosition(count, maxCount) {
+  const clamped = Math.max(0, Math.min(maxCount, count));
+  return usageData.resetTop + ((maxCount - clamped) / maxCount) * usageData.resetHeight;
+}
+
+function resetVisiblePoints(range) {
+  const allPoints = usageData.resetCredit.points;
+  const points = allPoints.filter(
+    (point) => point.timestamp >= range.start && point.timestamp <= range.end
+  );
+  const previousPoints = allPoints.filter((point) => point.timestamp < range.start);
+  if (previousPoints.length) {
+    const previous = previousPoints[previousPoints.length - 1];
+    points.unshift({
+      timestamp: range.start,
+      count: previous.count,
+      localTime: previous.localTime,
+      carriedForward: true
+    });
+  }
+  return points;
+}
+
 function dayBoundaryTimestamps(range) {
   const boundary = new Date(range.start * 1000);
   boundary.setHours(0, 0, 0, 0);
@@ -461,7 +512,9 @@ function dayBoundaryTimestamps(range) {
 
 function renderDayBoundaries(range) {
   const layer = document.getElementById("day-grid");
+  const resetLayer = document.getElementById("reset-day-grid");
   clearChildren(layer);
+  clearChildren(resetLayer);
   for (const timestamp of dayBoundaryTimestamps(range)) {
     const x = xPosition(timestamp, range);
     layer.appendChild(svgElement("line", {
@@ -470,6 +523,15 @@ function renderDayBoundaries(range) {
       x2: x.toFixed(2),
       y2: usageData.top + usageData.plotHeight,
       stroke: "#cbd5e1",
+      "stroke-width": 1,
+      "stroke-dasharray": "4 6"
+    }));
+    resetLayer.appendChild(svgElement("line", {
+      x1: x.toFixed(2),
+      y1: usageData.resetTop,
+      x2: x.toFixed(2),
+      y2: usageData.resetTop + usageData.resetHeight,
+      stroke: "#e2e8f0",
       "stroke-width": 1,
       "stroke-dasharray": "4 6"
     }));
@@ -542,6 +604,75 @@ function renderSeries(range) {
   emptyMessage.setAttribute("display", visiblePointCount ? "none" : "block");
 }
 
+function renderResetCredits(range) {
+  const layer = document.getElementById("reset-credit-layer");
+  const emptyMessage = document.getElementById("reset-empty-message");
+  clearChildren(layer);
+
+  const points = resetVisiblePoints(range);
+  const maxCount = Math.max(
+    1,
+    usageData.resetCredit.maxCount,
+    ...points.map((point) => point.count)
+  );
+  document.getElementById("reset-max-label").textContent = String(maxCount);
+  document.getElementById("reset-current-label").textContent = usageData.resetCredit.points.length
+    ? `Current: ${usageData.resetCredit.points[usageData.resetCredit.points.length - 1].count}`
+    : "Current: unknown";
+
+  if (!points.length) {
+    emptyMessage.setAttribute("display", "block");
+    return;
+  }
+  emptyMessage.setAttribute("display", "none");
+
+  const pathParts = [
+    `M ${xPosition(points[0].timestamp, range).toFixed(2)} ${resetYPosition(points[0].count, maxCount).toFixed(2)}`
+  ];
+  for (let index = 1; index < points.length; index += 1) {
+    const point = points[index];
+    pathParts.push(`H ${xPosition(point.timestamp, range).toFixed(2)}`);
+    pathParts.push(`V ${resetYPosition(point.count, maxCount).toFixed(2)}`);
+  }
+  pathParts.push(`H ${xPosition(range.end, range).toFixed(2)}`);
+  layer.appendChild(svgElement("path", {
+    d: pathParts.join(" "),
+    fill: "none",
+    stroke: "#0f766e",
+    "stroke-width": 2.5
+  }));
+
+  for (const point of points) {
+    if (point.carriedForward) {
+      continue;
+    }
+    const x = xPosition(point.timestamp, range);
+    const y = resetYPosition(point.count, maxCount);
+    const circle = svgElement("circle", {
+      class: "usage-point",
+      cx: x.toFixed(2),
+      cy: y.toFixed(2),
+      r: 4,
+      fill: "#0f766e"
+    });
+    const title = svgElement("title");
+    title.textContent = `Reset credits available - ${point.localTime} - ${point.count}`;
+    circle.appendChild(title);
+    layer.appendChild(circle);
+
+    const label = svgElement("text", {
+      x: x.toFixed(2),
+      y: (y - 9).toFixed(2),
+      "text-anchor": "middle",
+      "font-family": "system-ui, -apple-system, sans-serif",
+      "font-size": 11,
+      fill: "#0f766e"
+    });
+    label.textContent = String(point.count);
+    layer.appendChild(label);
+  }
+}
+
 function render() {
   const range = visibleRange();
   document.getElementById("start-label").textContent = formatDate(range.start);
@@ -549,6 +680,7 @@ function render() {
   document.getElementById("range-label").textContent = `${formatDate(range.start)} to ${formatDate(range.end)}`;
   renderDayBoundaries(range);
   renderSeries(range);
+  renderResetCredits(range);
 }
 
 document.getElementById("view-preset").addEventListener("change", render);
@@ -606,6 +738,37 @@ render();
         )
 
     parts.append('<g id="day-grid"></g>')
+    parts.append(
+        f'<text x="{left}" y="{reset_top - 16}" '
+        'font-family="system-ui, -apple-system, sans-serif" '
+        'font-size="13" font-weight="600" fill="#0f172a">'
+        "Reset credits available</text>"
+    )
+    parts.append(
+        f'<text id="reset-current-label" x="{left + plot_width}" '
+        f'y="{reset_top - 16}" text-anchor="end" '
+        'font-family="system-ui, -apple-system, sans-serif" '
+        'font-size="12" fill="#475569"></text>'
+    )
+    parts.append(
+        f'<rect x="{left}" y="{reset_top}" width="{plot_width}" '
+        f'height="{reset_height}" fill="#ffffff" stroke="#cbd5e1"/>'
+    )
+    for count_label, y in (
+        ("reset-max-label", reset_top + 4),
+        ("reset-zero-label", reset_top + reset_height + 4),
+    ):
+        parts.append(
+            f'<text id="{count_label}" x="{left - 12}" y="{y:.2f}" '
+            'text-anchor="end" font-family="system-ui, -apple-system, sans-serif" '
+            'font-size="12" fill="#475569"></text>'
+        )
+    parts.append(
+        f'<line x1="{left}" y1="{reset_top + reset_height:.2f}" '
+        f'x2="{left + plot_width}" y2="{reset_top + reset_height:.2f}" '
+        'stroke="#e2e8f0"/>'
+    )
+    parts.append('<g id="reset-day-grid"></g>')
 
     parts.append(
         f'<text id="start-label" x="{left}" y="{height - 36}" '
@@ -624,7 +787,15 @@ render();
         'font-size="13" fill="#64748b" display="none">'
         "No snapshots in selected window</text>"
     )
+    parts.append(
+        f'<text id="reset-empty-message" x="{left + plot_width / 2:.2f}" '
+        f'y="{reset_top + reset_height / 2:.2f}" text-anchor="middle" '
+        'font-family="system-ui, -apple-system, sans-serif" '
+        'font-size="12" fill="#64748b" display="none">'
+        "No reset-credit history in selected window</text>"
+    )
     parts.append('<g id="series-layer"></g>')
+    parts.append('<g id="reset-credit-layer"></g>')
     parts.append('<g id="legend-layer"></g>')
 
     parts.append(cdata_script(script))
