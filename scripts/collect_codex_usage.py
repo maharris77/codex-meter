@@ -328,6 +328,12 @@ def render_svg(snapshots: list[dict[str, Any]]) -> None:
     first = int(snapshots[0]["collectedAtEpoch"])
     last = int(snapshots[-1]["collectedAtEpoch"])
     last_collected = snapshots[-1]["collectedAt"]
+    header_status = f"Last collected {last_collected}"
+    current_reset_credit_count = reset_credit_count(snapshots[-1])
+    if current_reset_credit_count is not None:
+        header_status += (
+            f" | Reset credits available: {current_reset_credit_count}"
+        )
     palette = [
         "#2563eb",
         "#dc2626",
@@ -567,7 +573,7 @@ render();
         '<text x="32" y="34" font-family="system-ui, -apple-system, sans-serif" '
         'font-size="22" font-weight="700" fill="#0f172a">Codex usage limits</text>',
         '<text x="32" y="58" font-family="system-ui, -apple-system, sans-serif" '
-        f'font-size="13" fill="#475569">Last collected {html.escape(last_collected)}</text>',
+        f'font-size="13" fill="#475569">{html.escape(header_status)}</text>',
         '<foreignObject x="32" y="72" width="760" height="42">',
         '<div xmlns="http://www.w3.org/1999/xhtml" class="usage-control-row">',
         '<label>View '
