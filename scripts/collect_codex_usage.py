@@ -22,7 +22,7 @@ SVG_PATH = OUTPUT_DIR / "usage.svg"
 RESET_CREDIT_EVENTS_PATH = OUTPUT_DIR / "reset_credit_events.jsonl"
 READ_TIMEOUT_SECONDS = 30
 CODEX_BIN = "/opt/homebrew/bin/codex"
-PROJECT_VERSION = "0.2.4"
+PROJECT_VERSION = "0.2.7"
 WINDOW_LABELS_BY_DURATION_MINS = {
     300: "5-hour window",
     10080: "7-day window",
@@ -300,9 +300,12 @@ def collect_series(
 
 def collect_reset_credit_points(snapshots: list[dict[str, Any]]) -> list[dict[str, Any]]:
     points: list[dict[str, Any]] = []
+    previous_count: int | None = None
     for snapshot in snapshots:
         count = reset_credit_count(snapshot)
         if count is None:
+            continue
+        if count == previous_count:
             continue
         timestamp = int(snapshot["collectedAtEpoch"])
         points.append(
@@ -310,8 +313,10 @@ def collect_reset_credit_points(snapshots: list[dict[str, Any]]) -> list[dict[st
                 "timestamp": timestamp,
                 "count": count,
                 "localTime": format_epoch_local(timestamp),
+                "firstObserved": previous_count is None,
             }
         )
+        previous_count = count
     return points
 
 
@@ -627,20 +632,33 @@ function renderResetCredits(range) {
   }
   emptyMessage.setAttribute("display", "none");
 
-  const pathParts = [
+  const lineParts = [
     `M ${xPosition(points[0].timestamp, range).toFixed(2)} ${resetYPosition(points[0].count, maxCount).toFixed(2)}`
   ];
   for (let index = 1; index < points.length; index += 1) {
     const point = points[index];
-    pathParts.push(`H ${xPosition(point.timestamp, range).toFixed(2)}`);
-    pathParts.push(`V ${resetYPosition(point.count, maxCount).toFixed(2)}`);
+    lineParts.push(`H ${xPosition(point.timestamp, range).toFixed(2)}`);
+    lineParts.push(`V ${resetYPosition(point.count, maxCount).toFixed(2)}`);
   }
-  pathParts.push(`H ${xPosition(range.end, range).toFixed(2)}`);
+  lineParts.push(`H ${xPosition(range.end, range).toFixed(2)}`);
+  const baselineY = usageData.resetTop + usageData.resetHeight;
+  const areaParts = [
+    ...lineParts,
+    `V ${baselineY.toFixed(2)}`,
+    `H ${xPosition(points[0].timestamp, range).toFixed(2)}`,
+    "Z"
+  ];
   layer.appendChild(svgElement("path", {
-    d: pathParts.join(" "),
+    d: areaParts.join(" "),
+    fill: "#ccfbf1",
+    opacity: 0.65,
+    stroke: "none"
+  }));
+  layer.appendChild(svgElement("path", {
+    d: lineParts.join(" "),
     fill: "none",
     stroke: "#0f766e",
-    "stroke-width": 2.5
+    "stroke-width": 2
   }));
 
   for (const point of points) {
@@ -657,20 +675,9 @@ function renderResetCredits(range) {
       fill: "#0f766e"
     });
     const title = svgElement("title");
-    title.textContent = `Reset credits available - ${point.localTime} - ${point.count}`;
+    title.textContent = `${point.firstObserved ? "Reset credits first captured in local history" : "Reset credits changed"} - ${point.localTime} - ${point.count}`;
     circle.appendChild(title);
     layer.appendChild(circle);
-
-    const label = svgElement("text", {
-      x: x.toFixed(2),
-      y: (y - 9).toFixed(2),
-      "text-anchor": "middle",
-      "font-family": "system-ui, -apple-system, sans-serif",
-      "font-size": 11,
-      fill: "#0f766e"
-    });
-    label.textContent = String(point.count);
-    layer.appendChild(label);
   }
 }
 

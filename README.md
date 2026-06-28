@@ -30,9 +30,10 @@ notification.
 
 The SVG graph defaults to the past 7 days and includes view options for common
 time windows. When reset-credit data is available, the graph header shows the
-current count and the lower strip shows count changes over the selected time
-range. The view dropdown only changes what the graph displays; the sampling
-interval is set by the LaunchAgent installer.
+current count and the lower strip shows the first count captured in local
+history plus later count changes over the selected time range. The view
+dropdown only changes what the graph displays; the sampling interval is set by
+the LaunchAgent installer.
 
 ## Scope
 
