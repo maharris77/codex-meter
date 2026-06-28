@@ -29,8 +29,10 @@ snapshot, Codex Meter appends an event to
 notification.
 
 The SVG graph defaults to the past 7 days and includes view options for common
-time windows. The view dropdown only changes what the graph displays; the
-sampling interval is set by the LaunchAgent installer.
+time windows. When reset-credit data is available, the graph header shows the
+current count and the lower strip shows count changes over the selected time
+range. The view dropdown only changes what the graph displays; the sampling
+interval is set by the LaunchAgent installer.
 
 ## Scope
 

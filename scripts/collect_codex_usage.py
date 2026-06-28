@@ -22,7 +22,7 @@ SVG_PATH = OUTPUT_DIR / "usage.svg"
 RESET_CREDIT_EVENTS_PATH = OUTPUT_DIR / "reset_credit_events.jsonl"
 READ_TIMEOUT_SECONDS = 30
 CODEX_BIN = "/opt/homebrew/bin/codex"
-PROJECT_VERSION = "0.2.3"
+PROJECT_VERSION = "0.2.4"
 WINDOW_LABELS_BY_DURATION_MINS = {
     300: "5-hour window",
     10080: "7-day window",
@@ -616,6 +616,7 @@ function renderResetCredits(range) {
     ...points.map((point) => point.count)
   );
   document.getElementById("reset-max-label").textContent = String(maxCount);
+  document.getElementById("reset-zero-label").textContent = "0";
   document.getElementById("reset-current-label").textContent = usageData.resetCredit.points.length
     ? `Current: ${usageData.resetCredit.points[usageData.resetCredit.points.length - 1].count}`
     : "Current: unknown";
