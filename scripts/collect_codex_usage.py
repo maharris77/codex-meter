@@ -670,7 +670,6 @@ def render_svg(snapshots: list[dict[str, Any]]) -> None:
     script = """
 const usageData = __USAGE_DATA__;
 const svgNS = "http://www.w3.org/2000/svg";
-const viewStorageKey = "codex-meter:view-preset";
 const presetSeconds = {
   five_hours: 5 * 60 * 60,
   one_day: 24 * 60 * 60,
@@ -713,36 +712,17 @@ function hasViewPreset(value) {
   return value === "all" || Object.prototype.hasOwnProperty.call(presetSeconds, value);
 }
 
-function storedViewPreset() {
-  try {
-    const value = window.localStorage.getItem(viewStorageKey);
-    return hasViewPreset(value) ? value : null;
-  } catch {
-    return null;
-  }
-}
-
 function initialViewPreset() {
-  const stored = storedViewPreset();
-  if (stored !== null) {
-    return stored;
-  }
   return hasViewPreset(usageData.defaultViewPreset) ? usageData.defaultViewPreset : "seven_days";
 }
 
-function saveViewPreset(value) {
-  try {
-    window.localStorage.setItem(viewStorageKey, value);
-  } catch {
-  }
-}
+let currentViewPreset = initialViewPreset();
 
 function selectedIntervalSeconds() {
-  const preset = document.getElementById("view-preset").value;
-  if (preset === "all") {
+  if (currentViewPreset === "all") {
     return null;
   }
-  return presetSeconds[preset];
+  return presetSeconds[currentViewPreset];
 }
 
 function visibleRange() {
@@ -1082,6 +1062,7 @@ function renderResetCreditExpirationLabels(layer, range, maxCount) {
 }
 
 function render() {
+  document.getElementById("view-preset").value = currentViewPreset;
   const range = visibleRange();
   document.getElementById("start-label").textContent = formatDate(range.start);
   document.getElementById("end-label").textContent = formatDate(range.end);
@@ -1093,9 +1074,8 @@ function render() {
 }
 
 const viewPresetSelect = document.getElementById("view-preset");
-viewPresetSelect.value = initialViewPreset();
 viewPresetSelect.addEventListener("change", () => {
-  saveViewPreset(viewPresetSelect.value);
+  currentViewPreset = hasViewPreset(viewPresetSelect.value) ? viewPresetSelect.value : initialViewPreset();
   render();
 });
 render();

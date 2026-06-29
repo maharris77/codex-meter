@@ -34,11 +34,12 @@ chooses another default view. Set `defaultViewPreset` in
 `~/Documents/Archives/Codex Meter/settings.json` to one of `five_hours`,
 `one_day`, `seven_days`, `thirty_days`, or `all`. The repo default remains
 `seven_days`; missing or invalid settings fall back to that default. The
-interactive SVG also remembers dropdown changes in browser storage. When
-reset-credit data is available, the graph header shows the current count and
-the lower strip shows the first count captured in local history plus later
-count changes over the selected time range. The view dropdown only changes what
-the graph displays; the sampling interval is set by the LaunchAgent installer.
+view dropdown reflects the current open graph view, starting from the configured
+default and changing only when you choose another view. When reset-credit data
+is available, the graph header shows the current count and the lower strip shows
+the first count captured in local history plus later count changes over the
+selected time range. The view dropdown only changes what the graph displays; the
+sampling interval is set by the LaunchAgent installer.
 Weekly usage-limit resets are labeled on the main graph as natural, manual, or
 hard resets. Natural resets are resets observed at the scheduled weekly reset
 time, manual resets are early resets with a reset credit decrease, and hard
