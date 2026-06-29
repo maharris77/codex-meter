@@ -37,6 +37,7 @@ The collector starts the local Codex app-server, calls
 - `~/Documents/Archives/Codex Meter/snapshots.jsonl`
 - `~/Documents/Archives/Codex Meter/latest.json`
 - `~/Documents/Archives/Codex Meter/usage.svg`
+- `~/Documents/Archives/Codex Meter/usage.html`
 - `~/Documents/Archives/Codex Meter/settings.json`
 
 When the app-server response includes reset credits, the collector also watches
@@ -125,6 +126,15 @@ open -a "Google Chrome" "$HOME/Documents/Archives/Codex Meter/usage.svg"
 ```
 
 Hover directly over the plotted dots for the point details.
+
+For an auto-refreshing browser view, open the generated HTML wrapper:
+
+```sh
+open -a Safari "$HOME/Documents/Archives/Codex Meter/usage.html"
+```
+
+It reloads the graph every minute, so a browser left open picks up the next
+collector-written SVG without a manual refresh.
 
 ## Run On Startup
 

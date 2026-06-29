@@ -19,13 +19,15 @@ OUTPUT_DIR = Path.home() / "Documents" / "Archives" / "Codex Meter"
 SNAPSHOTS_PATH = OUTPUT_DIR / "snapshots.jsonl"
 LATEST_PATH = OUTPUT_DIR / "latest.json"
 SVG_PATH = OUTPUT_DIR / "usage.svg"
+HTML_PATH = OUTPUT_DIR / "usage.html"
 RESET_CREDIT_EVENTS_PATH = OUTPUT_DIR / "reset_credit_events.jsonl"
 SETTINGS_PATH = OUTPUT_DIR / "settings.json"
 READ_TIMEOUT_SECONDS = 30
 CODEX_BIN = "/opt/homebrew/bin/codex"
-PROJECT_VERSION = "0.4.0"
+PROJECT_VERSION = "0.4.1"
 RESET_TIME_TOLERANCE_SECONDS = 10 * 60
 RESET_CREDIT_EXPIRATION_DAYS = 30
+HTML_REFRESH_SECONDS = 60
 DEFAULT_VIEW_PRESET = "seven_days"
 VIEW_PRESETS = ("five_hours", "one_day", "seven_days", "thirty_days", "all")
 VIEW_PRESET_LABELS = {
@@ -71,13 +73,29 @@ def format_epoch_local_date(epoch_seconds: int | float | None) -> str:
     )
 
 
-def format_epoch_panel(epoch_seconds: int | float | None) -> str:
+def format_duration_compact(seconds: int | float | None) -> str:
+    if seconds is None:
+        return "unknown"
+    remaining = max(0, int(seconds))
+    days, remaining = divmod(remaining, 24 * 60 * 60)
+    hours, remaining = divmod(remaining, 60 * 60)
+    minutes = remaining // 60
+    if days:
+        return f"{days}d{hours}h{minutes}m"
+    if hours:
+        return f"{hours}h{minutes}m"
+    return f"{minutes}m"
+
+
+def format_epoch_with_countdown(
+    epoch_seconds: int | float | None,
+    base_epoch_seconds: int,
+) -> str:
     if epoch_seconds is None:
         return "unknown"
     return (
-        datetime.fromtimestamp(epoch_seconds, timezone.utc)
-        .astimezone()
-        .strftime("%b %-d %H:%M %Z")
+        f"{format_epoch_local(epoch_seconds)} "
+        f"({format_duration_compact(float(epoch_seconds) - base_epoch_seconds)})"
     )
 
 
@@ -575,10 +593,13 @@ def codex_natural_reset_summary(snapshot: dict[str, Any]) -> dict[str, str]:
     ):
         effective_primary_reset = weekly_reset
         five_hour_note = "with weekly reset"
+    collected_at = int(snapshot["collectedAtEpoch"])
 
     return {
-        "fiveHour": format_epoch_panel(effective_primary_reset),
-        "weekly": format_epoch_panel(weekly_reset),
+        "fiveHour": format_epoch_with_countdown(
+            effective_primary_reset, collected_at
+        ),
+        "weekly": format_epoch_with_countdown(weekly_reset, collected_at),
         "fiveHourNote": five_hour_note,
     }
 
@@ -613,7 +634,7 @@ def render_svg(snapshots: list[dict[str, Any]]) -> None:
     reset_height = 70
     first = int(snapshots[0]["collectedAtEpoch"])
     last = int(snapshots[-1]["collectedAtEpoch"])
-    last_collected = snapshots[-1]["collectedAt"]
+    last_collected = format_epoch_local(last)
     header_status = f"Last collected {last_collected}"
     current_reset_credit_count = reset_credit_count(snapshots[-1])
     if current_reset_credit_count is not None:
@@ -1294,6 +1315,65 @@ render();
     SVG_PATH.write_text("\n".join(parts), "utf-8")
 
 
+def render_html() -> None:
+    HTML_PATH.write_text(
+        f"""<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Codex Meter</title>
+  <style>
+    html, body {{
+      margin: 0;
+      min-height: 100%;
+      background: #f8fafc;
+    }}
+    body {{
+      font-family: system-ui, -apple-system, sans-serif;
+    }}
+    #graph-frame {{
+      display: block;
+      width: 100vw;
+      height: 100vh;
+      border: 0;
+    }}
+    #status {{
+      position: fixed;
+      right: 12px;
+      bottom: 10px;
+      padding: 4px 8px;
+      border: 1px solid #cbd5e1;
+      border-radius: 6px;
+      background: rgba(255, 255, 255, 0.92);
+      color: #475569;
+      font-size: 12px;
+    }}
+  </style>
+</head>
+<body>
+  <iframe id="graph-frame" src="usage.svg" title="Codex usage graph"></iframe>
+  <div id="status"></div>
+  <script>
+    const refreshSeconds = {HTML_REFRESH_SECONDS};
+    const graphFrame = document.getElementById("graph-frame");
+    const status = document.getElementById("status");
+
+    function refreshGraph() {{
+      graphFrame.src = `usage.svg?updated=${{Date.now()}}`;
+      status.textContent = `Refreshed ${{new Date().toLocaleString()}}`;
+    }}
+
+    refreshGraph();
+    window.setInterval(refreshGraph, refreshSeconds * 1000);
+  </script>
+</body>
+</html>
+""",
+        "utf-8",
+    )
+
+
 def summary_lines(result: dict[str, Any]) -> list[str]:
     lines: list[str] = []
     primary = result["rateLimits"]
@@ -1326,11 +1406,13 @@ def main() -> None:
     append_snapshot(snapshot)
     alert_if_reset_credit_count_changed(previous_snapshot, snapshot)
     render_svg(load_snapshots())
+    render_html()
 
     if sys.stdout.isatty():
         print(f"Wrote {SNAPSHOTS_PATH}")
         print(f"Wrote {LATEST_PATH}")
         print(f"Wrote {SVG_PATH}")
+        print(f"Wrote {HTML_PATH}")
         for line in summary_lines(result):
             print(line)
 
