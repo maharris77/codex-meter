@@ -22,7 +22,8 @@ SVG_PATH = OUTPUT_DIR / "usage.svg"
 RESET_CREDIT_EVENTS_PATH = OUTPUT_DIR / "reset_credit_events.jsonl"
 READ_TIMEOUT_SECONDS = 30
 CODEX_BIN = "/opt/homebrew/bin/codex"
-PROJECT_VERSION = "0.2.7"
+PROJECT_VERSION = "0.2.8"
+RESET_TIME_TOLERANCE_SECONDS = 10 * 60
 WINDOW_LABELS_BY_DURATION_MINS = {
     300: "5-hour window",
     10080: "7-day window",
@@ -320,6 +321,108 @@ def collect_reset_credit_points(snapshots: list[dict[str, Any]]) -> list[dict[st
     return points
 
 
+def _number(value: Any) -> float | None:
+    if isinstance(value, (int, float)):
+        return float(value)
+    return None
+
+
+def _epoch(value: Any) -> int | None:
+    if isinstance(value, (int, float)):
+        return int(value)
+    return None
+
+
+def classify_weekly_reset(
+    previous_snapshot: dict[str, Any],
+    current_snapshot: dict[str, Any],
+    previous_window: dict[str, Any],
+    current_window: dict[str, Any],
+) -> str | None:
+    previous_reset = _epoch(previous_window.get("resetsAt"))
+    current_reset = _epoch(current_window.get("resetsAt"))
+    current_collected = _epoch(current_snapshot.get("collectedAtEpoch"))
+    previous_used = _number(previous_window.get("usedPercent"))
+    current_used = _number(current_window.get("usedPercent"))
+    if (
+        previous_reset is None
+        or current_reset is None
+        or current_collected is None
+        or previous_used is None
+        or current_used is None
+    ):
+        return None
+    if current_reset <= previous_reset:
+        return None
+
+    previous_count = reset_credit_count(previous_snapshot)
+    current_count = reset_credit_count(current_snapshot)
+    reset_credit_decreased = (
+        previous_count is not None
+        and current_count is not None
+        and current_count < previous_count
+    )
+    scheduled_reset_reached = (
+        current_collected + RESET_TIME_TOLERANCE_SECONDS >= previous_reset
+    )
+    usage_dropped = current_used < previous_used
+
+    if scheduled_reset_reached:
+        return "natural"
+    if reset_credit_decreased:
+        return "manual"
+    if usage_dropped:
+        return "hard"
+    return None
+
+
+def collect_weekly_reset_events(
+    snapshots: list[dict[str, Any]],
+) -> list[dict[str, Any]]:
+    events: list[dict[str, Any]] = []
+    for previous_snapshot, current_snapshot in zip(snapshots, snapshots[1:]):
+        previous_limits = limit_snapshots(previous_snapshot["result"])
+        current_limits = limit_snapshots(current_snapshot["result"])
+        previous_count = reset_credit_count(previous_snapshot)
+        current_count = reset_credit_count(current_snapshot)
+        for limit_id, current_limit in sorted(current_limits.items()):
+            previous_limit = previous_limits.get(limit_id)
+            if not previous_limit:
+                continue
+            previous_window = previous_limit.get("secondary")
+            current_window = current_limit.get("secondary")
+            if not previous_window or not current_window:
+                continue
+            reset_type = classify_weekly_reset(
+                previous_snapshot,
+                current_snapshot,
+                previous_window,
+                current_window,
+            )
+            if reset_type is None:
+                continue
+            timestamp = int(current_snapshot["collectedAtEpoch"])
+            events.append(
+                {
+                    "timestamp": timestamp,
+                    "localTime": format_epoch_local(timestamp),
+                    "type": reset_type,
+                    "limit": display_limit_name(limit_id, current_limit),
+                    "previousPercent": previous_window.get("usedPercent"),
+                    "currentPercent": current_window.get("usedPercent"),
+                    "previousResetsAt": format_epoch_local(
+                        previous_window.get("resetsAt")
+                    ),
+                    "currentResetsAt": format_epoch_local(
+                        current_window.get("resetsAt")
+                    ),
+                    "previousResetCredits": previous_count,
+                    "currentResetCredits": current_count,
+                }
+            )
+    return events
+
+
 def svg_y(percent: float, top: int, height: int) -> float:
     return top + (100 - max(0, min(100, percent))) / 100 * height
 
@@ -387,6 +490,7 @@ def render_svg(snapshots: list[dict[str, Any]]) -> None:
             }
         )
     reset_credit_points = collect_reset_credit_points(snapshots)
+    weekly_reset_events = collect_weekly_reset_events(snapshots)
     reset_credit_max_count = max(
         [1] + [int(point["count"]) for point in reset_credit_points]
     )
@@ -404,6 +508,7 @@ def render_svg(snapshots: list[dict[str, Any]]) -> None:
                 "maxCount": reset_credit_max_count,
                 "points": reset_credit_points,
             },
+            "weeklyResets": weekly_reset_events,
             "series": series_data,
         },
         separators=(",", ":"),
@@ -609,6 +714,98 @@ function renderSeries(range) {
   emptyMessage.setAttribute("display", visiblePointCount ? "none" : "block");
 }
 
+function weeklyResetColor(type) {
+  if (type === "manual") {
+    return "#ca8a04";
+  }
+  if (type === "hard") {
+    return "#dc2626";
+  }
+  return "#64748b";
+}
+
+function weeklyResetLabel(type) {
+  if (type === "manual") {
+    return "Manual weekly reset";
+  }
+  if (type === "hard") {
+    return "Hard weekly reset";
+  }
+  return "Natural weekly reset";
+}
+
+function renderWeeklyResets(range) {
+  const layer = document.getElementById("weekly-reset-layer");
+  const legendLayer = document.getElementById("weekly-reset-legend-layer");
+  clearChildren(layer);
+  clearChildren(legendLayer);
+
+  const visibleEvents = usageData.weeklyResets.filter(
+    (event) => event.timestamp >= range.start && event.timestamp <= range.end
+  );
+  for (const event of visibleEvents) {
+    const x = xPosition(event.timestamp, range);
+    const color = weeklyResetColor(event.type);
+    const line = svgElement("line", {
+      class: "weekly-reset-marker",
+      x1: x.toFixed(2),
+      y1: usageData.top,
+      x2: x.toFixed(2),
+      y2: usageData.top + usageData.plotHeight,
+      stroke: color,
+      "stroke-width": event.type === "hard" ? 2.5 : 1.8,
+      "stroke-dasharray": event.type === "natural" ? "5 6" : "none",
+      opacity: 0.75
+    });
+    const title = svgElement("title");
+    title.textContent = `${weeklyResetLabel(event.type)} - ${event.limit} - ${event.localTime} - weekly usage ${event.previousPercent}% to ${event.currentPercent}% - reset credits ${event.previousResetCredits ?? "unknown"} to ${event.currentResetCredits ?? "unknown"} - previous reset ${event.previousResetsAt} - current reset ${event.currentResetsAt}`;
+    line.appendChild(title);
+    layer.appendChild(line);
+
+    const tag = svgElement("text", {
+      x: x.toFixed(2),
+      y: usageData.top - 8,
+      "text-anchor": "middle",
+      "font-family": "system-ui, -apple-system, sans-serif",
+      "font-size": 10,
+      "font-weight": 700,
+      fill: color
+    });
+    tag.textContent = event.type[0].toUpperCase();
+    tag.appendChild(title.cloneNode(true));
+    layer.appendChild(tag);
+  }
+
+  const legendItems = [
+    ["natural", "Natural reset"],
+    ["manual", "Manual reset"],
+    ["hard", "Hard reset"]
+  ];
+  const baseY = usageData.top + 136;
+  legendItems.forEach(([type, label], index) => {
+    const y = baseY + index * 22;
+    const color = weeklyResetColor(type);
+    legendLayer.appendChild(svgElement("line", {
+      x1: usageData.left + usageData.plotWidth + 28,
+      y1: y - 4,
+      x2: usageData.left + usageData.plotWidth + 48,
+      y2: y - 4,
+      stroke: color,
+      "stroke-width": type === "hard" ? 2.5 : 2,
+      "stroke-dasharray": type === "natural" ? "5 6" : "none"
+    }));
+    const text = svgElement("text", {
+      x: usageData.left + usageData.plotWidth + 56,
+      y,
+      "font-family": "system-ui, -apple-system, sans-serif",
+      "font-size": 12,
+      fill: "#0f172a"
+    });
+    text.textContent = label;
+    legendLayer.appendChild(text);
+  });
+}
+
 function renderResetCredits(range) {
   const layer = document.getElementById("reset-credit-layer");
   const emptyMessage = document.getElementById("reset-empty-message");
@@ -688,6 +885,7 @@ function render() {
   document.getElementById("range-label").textContent = `${formatDate(range.start)} to ${formatDate(range.end)}`;
   renderDayBoundaries(range);
   renderSeries(range);
+  renderWeeklyResets(range);
   renderResetCredits(range);
 }
 
@@ -703,6 +901,7 @@ render();
         '<rect width="100%" height="100%" fill="#f8fafc"/>',
         "<style>"
         ".usage-point{cursor:crosshair}.usage-point:hover{stroke:#0f172a;stroke-width:2}"
+        ".weekly-reset-marker{cursor:help}.weekly-reset-marker:hover{opacity:1}"
         ".usage-control-row{display:flex;align-items:center;gap:8px;"
         "font-family:system-ui,-apple-system,sans-serif;font-size:13px;color:#334155}"
         ".usage-control-row label{display:flex;align-items:center;gap:5px}"
@@ -746,6 +945,7 @@ render();
         )
 
     parts.append('<g id="day-grid"></g>')
+    parts.append('<g id="weekly-reset-layer"></g>')
     parts.append(
         f'<text x="{left}" y="{reset_top - 16}" '
         'font-family="system-ui, -apple-system, sans-serif" '
@@ -805,6 +1005,7 @@ render();
     parts.append('<g id="series-layer"></g>')
     parts.append('<g id="reset-credit-layer"></g>')
     parts.append('<g id="legend-layer"></g>')
+    parts.append('<g id="weekly-reset-legend-layer"></g>')
 
     parts.append(cdata_script(script))
     parts.append("</svg>\n")

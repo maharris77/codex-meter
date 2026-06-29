@@ -33,7 +33,11 @@ time windows. When reset-credit data is available, the graph header shows the
 current count and the lower strip shows the first count captured in local
 history plus later count changes over the selected time range. The view
 dropdown only changes what the graph displays; the sampling interval is set by
-the LaunchAgent installer.
+the LaunchAgent installer. Weekly usage-limit resets are marked on the main
+graph as natural, manual, or hard resets. Natural resets are resets observed at
+the scheduled weekly reset time, manual resets are early resets with a reset
+credit decrease, and hard resets are early usage resets without a reset-credit
+decrease.
 
 ## Scope
 
