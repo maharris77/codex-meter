@@ -22,7 +22,7 @@ SVG_PATH = OUTPUT_DIR / "usage.svg"
 RESET_CREDIT_EVENTS_PATH = OUTPUT_DIR / "reset_credit_events.jsonl"
 READ_TIMEOUT_SECONDS = 30
 CODEX_BIN = "/opt/homebrew/bin/codex"
-PROJECT_VERSION = "0.2.10"
+PROJECT_VERSION = "0.2.11"
 RESET_TIME_TOLERANCE_SECONDS = 10 * 60
 RESET_CREDIT_EXPIRATION_DAYS = 30
 WINDOW_LABELS_BY_DURATION_MINS = {
@@ -396,8 +396,8 @@ def collect_reset_credit_expiration_anchors(
                 )
             add_anchor(timestamp)
         elif count < previous_count:
-            add_anchor(timestamp)
             lots = lots[previous_count - count :]
+            add_anchor(timestamp)
         previous_count = count
 
     if last_timestamp is not None and (
@@ -597,6 +597,11 @@ def render_svg(snapshots: list[dict[str, Any]]) -> None:
     reset_credit_expiration_anchors = collect_reset_credit_expiration_anchors(
         snapshots
     )
+    reset_credit_expiration_rows = (
+        reset_credit_expiration_anchors[-1]["lots"]
+        if reset_credit_expiration_anchors
+        else []
+    )
     weekly_reset_events = collect_weekly_reset_events(snapshots)
     reset_credit_max_count = max(
         [1] + [int(point["count"]) for point in reset_credit_points]
@@ -615,6 +620,7 @@ def render_svg(snapshots: list[dict[str, Any]]) -> None:
                 "maxCount": reset_credit_max_count,
                 "points": reset_credit_points,
                 "expirationAnchors": reset_credit_expiration_anchors,
+                "expirationRows": reset_credit_expiration_rows,
             },
             "weeklyResets": weekly_reset_events,
             "series": series_data,
@@ -1075,6 +1081,43 @@ render();
 
     parts.append('<g id="day-grid"></g>')
     parts.append('<g id="weekly-reset-layer"></g>')
+    expiry_x = left + plot_width + 28
+    expiry_y = top + 270
+    parts.append(
+        f'<text x="{expiry_x}" y="{expiry_y}" '
+        'font-family="system-ui, -apple-system, sans-serif" '
+        'font-size="12" font-weight="700" fill="#0f172a">'
+        "Reset credit expirations</text>"
+    )
+    if reset_credit_expiration_rows:
+        parts.append(
+            f'<text x="{expiry_x}" y="{expiry_y + 18}" '
+            'font-family="system-ui, -apple-system, sans-serif" '
+            'font-size="10" fill="#64748b">Current FIFO estimate; 30-day expiration</text>'
+        )
+        for index, row in enumerate(reset_credit_expiration_rows, start=1):
+            row_y = expiry_y + 18 + index * 28
+            expires_at = html.escape(str(row["expiresAtText"]))
+            added_at = html.escape(str(row["addedAtText"]))
+            uncertainty = " (uncertain date)" if row["uncertain"] else ""
+            parts.append(
+                f'<text x="{expiry_x}" y="{row_y}" '
+                'font-family="system-ui, -apple-system, sans-serif" '
+                'font-size="11" fill="#334155">'
+                f'#{row["position"]}: expires {expires_at}{uncertainty}</text>'
+            )
+            parts.append(
+                f'<text x="{expiry_x}" y="{row_y + 13}" '
+                'font-family="system-ui, -apple-system, sans-serif" '
+                'font-size="10" fill="#64748b">'
+                f'added: {added_at}</text>'
+            )
+    else:
+        parts.append(
+            f'<text x="{expiry_x}" y="{expiry_y + 18}" '
+            'font-family="system-ui, -apple-system, sans-serif" '
+            'font-size="11" fill="#64748b">No available reset credits</text>'
+        )
     parts.append(
         f'<text x="{left}" y="{reset_top - 16}" '
         'font-family="system-ui, -apple-system, sans-serif" '

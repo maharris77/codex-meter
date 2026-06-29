@@ -40,10 +40,11 @@ credit decrease, and hard resets are early usage resets without a reset-credit
 decrease. Usage series use colorblind-friendlier colors and distinct line
 styles so color is not the only cue. The graph also shows a FIFO estimate of
 reset-credit expiration dates using Codex's 30-day reset-credit expiration
-rule. Expiration labels are drawn inside the reset-credit strip near the right
-edge of each credit-level segment, with older credits above newer credits.
-Credits already present when local tracking first observed reset-credit data
-are labeled with uncertain expiration dates.
+rule. Expiration labels are drawn inside the reset-credit strip just left of
+each visible credit-count change and the present edge, with older credits above
+newer credits. A separate table shows the current available-credit expiration
+estimate. Credits already present when local tracking first observed
+reset-credit data are labeled with uncertain expiration dates.
 
 ## Scope
 
