@@ -1,7 +1,8 @@
 # Codex Meter
 
-Codex Meter is a tiny macOS tool that records local Codex usage-limit snapshots
-and renders them as a history graph.
+Codex Meter is a tiny macOS tool that records local Codex usage-limit snapshots,
+renders them as a history graph, and provides a native menu-bar view over the
+same local archive.
 
 ![Example Codex usage graph](docs/example-usage.png)
 
@@ -147,6 +148,7 @@ state, limit IDs, window lengths, reset timestamps, and used percentages.
 - Codex app installed and signed in.
 - Codex CLI at `/opt/homebrew/bin/codex`.
 - Homebrew Python at `/opt/homebrew/opt/python@3.13/bin/python3.13`.
+- Xcode 26.6 to build the native menu-bar app from source.
 
 ## Run Once
 
@@ -187,6 +189,32 @@ collector-written SVG without a manual refresh. The configured default view is
 used when the HTML file first opens; timed refreshes keep the current graph view
 selected in the dropdown.
 
+## Native Menu-Bar App
+
+Codex Meter also includes a native macOS menu-bar app. It reads the same
+`~/Documents/Archives/Codex Meter/` files as the SVG graph, so it works with the
+LaunchAgent collector instead of running a second scheduler. The menu-bar title
+shows the current Codex 5-hour and weekly percentages. The popover shows Codex
+5-hour and weekly usage, reset times, reset credits, and quick actions to
+refresh, open the graph, open Settings, or quit.
+
+Settings uses the same `settings.json` file as the SVG renderer. Changing the
+default graph view in the app updates the default view used by the generated
+SVG.
+
+To build and run the app from source:
+
+```sh
+./script/build_and_run.sh
+```
+
+The script builds the Swift package, stages `dist/CodexMeter.app`, and launches
+that app bundle. It can also verify launch:
+
+```sh
+./script/build_and_run.sh --verify
+```
+
 ## Run On Startup
 
 The installer writes and loads a LaunchAgent. With no arguments, it samples
@@ -224,6 +252,9 @@ client name, and output archive use the Codex Meter name.
 
 ## Repository Contents
 
+- `Package.swift`: the SwiftPM package for the native macOS menu-bar app.
+- `Sources/CodexMeterApp/`: SwiftUI app, views, archive-backed store, and models.
+- `script/build_and_run.sh`: build, stage, and launch `dist/CodexMeter.app`.
 - `scripts/collect_codex_usage.py`: the collector and SVG renderer.
 - `scripts/install_launch_agent.py`: the LaunchAgent installer.
 - `scripts/migrate_to_codex_meter.py`: the old-name data migration.
