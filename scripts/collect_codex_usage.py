@@ -23,7 +23,7 @@ RESET_CREDIT_EVENTS_PATH = OUTPUT_DIR / "reset_credit_events.jsonl"
 SETTINGS_PATH = OUTPUT_DIR / "settings.json"
 READ_TIMEOUT_SECONDS = 30
 CODEX_BIN = "/opt/homebrew/bin/codex"
-PROJECT_VERSION = "0.3.0"
+PROJECT_VERSION = "0.4.0"
 RESET_TIME_TOLERANCE_SECONDS = 10 * 60
 RESET_CREDIT_EXPIRATION_DAYS = 30
 DEFAULT_VIEW_PRESET = "seven_days"
@@ -68,6 +68,16 @@ def format_epoch_local_date(epoch_seconds: int | float | None) -> str:
         return "uncertain"
     return datetime.fromtimestamp(epoch_seconds, timezone.utc).astimezone().strftime(
         "%Y-%m-%d"
+    )
+
+
+def format_epoch_panel(epoch_seconds: int | float | None) -> str:
+    if epoch_seconds is None:
+        return "unknown"
+    return (
+        datetime.fromtimestamp(epoch_seconds, timezone.utc)
+        .astimezone()
+        .strftime("%b %-d %H:%M %Z")
     )
 
 
@@ -547,6 +557,32 @@ def collect_weekly_reset_events(
     return events
 
 
+def codex_natural_reset_summary(snapshot: dict[str, Any]) -> dict[str, str]:
+    codex_limit = limit_snapshots(snapshot["result"]).get("codex")
+    if not isinstance(codex_limit, dict):
+        return {
+            "fiveHour": "unknown",
+            "weekly": "unknown",
+            "fiveHourNote": "",
+        }
+
+    primary_reset = _epoch((codex_limit.get("primary") or {}).get("resetsAt"))
+    weekly_reset = _epoch((codex_limit.get("secondary") or {}).get("resetsAt"))
+    effective_primary_reset = primary_reset
+    five_hour_note = ""
+    if weekly_reset is not None and (
+        primary_reset is None or weekly_reset < primary_reset
+    ):
+        effective_primary_reset = weekly_reset
+        five_hour_note = "with weekly reset"
+
+    return {
+        "fiveHour": format_epoch_panel(effective_primary_reset),
+        "weekly": format_epoch_panel(weekly_reset),
+        "fiveHourNote": five_hour_note,
+    }
+
+
 def svg_y(percent: float, top: int, height: int) -> float:
     return top + (100 - max(0, min(100, percent))) / 100 * height
 
@@ -631,6 +667,7 @@ def render_svg(snapshots: list[dict[str, Any]]) -> None:
         if reset_credit_expiration_anchors
         else []
     )
+    natural_reset_summary = codex_natural_reset_summary(snapshots[-1])
     weekly_reset_events = collect_weekly_reset_events(snapshots)
     reset_credit_max_count = max(
         [1] + [int(point["count"]) for point in reset_credit_points]
@@ -1130,7 +1167,33 @@ render();
     parts.append('<g id="day-grid"></g>')
     parts.append('<g id="weekly-reset-layer"></g>')
     expiry_x = left + plot_width + 28
-    expiry_y = top + 270
+    reset_summary_y = top + 18 + len(series_data) * 24 + 32
+    parts.append(
+        f'<text x="{expiry_x}" y="{reset_summary_y}" '
+        'font-family="system-ui, -apple-system, sans-serif" '
+        'font-size="12" font-weight="700" fill="#0f172a">'
+        "Next natural resets</text>"
+    )
+    parts.append(
+        f'<text x="{expiry_x}" y="{reset_summary_y + 21}" '
+        'font-family="system-ui, -apple-system, sans-serif" '
+        'font-size="11" fill="#334155">'
+        f'Codex 5-hour: {html.escape(natural_reset_summary["fiveHour"])}</text>'
+    )
+    if natural_reset_summary["fiveHourNote"]:
+        parts.append(
+            f'<text x="{expiry_x}" y="{reset_summary_y + 35}" '
+            'font-family="system-ui, -apple-system, sans-serif" '
+            'font-size="10" fill="#64748b">'
+            f'{html.escape(natural_reset_summary["fiveHourNote"])}</text>'
+        )
+    parts.append(
+        f'<text x="{expiry_x}" y="{reset_summary_y + 55}" '
+        'font-family="system-ui, -apple-system, sans-serif" '
+        'font-size="11" fill="#334155">'
+        f'Codex weekly: {html.escape(natural_reset_summary["weekly"])}</text>'
+    )
+    expiry_y = reset_top
     parts.append(
         f'<text x="{expiry_x}" y="{expiry_y}" '
         'font-family="system-ui, -apple-system, sans-serif" '
