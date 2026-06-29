@@ -133,7 +133,7 @@ For an auto-refreshing browser view, open the generated HTML wrapper:
 open -a Safari "$HOME/Documents/Archives/Codex Meter/usage.html"
 ```
 
-It reloads the graph every minute, so a browser left open picks up the next
+It reloads the graph every 30 seconds, so a browser left open picks up the next
 collector-written SVG without a manual refresh.
 
 ## Run On Startup
