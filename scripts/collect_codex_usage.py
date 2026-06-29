@@ -22,8 +22,9 @@ SVG_PATH = OUTPUT_DIR / "usage.svg"
 RESET_CREDIT_EVENTS_PATH = OUTPUT_DIR / "reset_credit_events.jsonl"
 READ_TIMEOUT_SECONDS = 30
 CODEX_BIN = "/opt/homebrew/bin/codex"
-PROJECT_VERSION = "0.2.8"
+PROJECT_VERSION = "0.2.10"
 RESET_TIME_TOLERANCE_SECONDS = 10 * 60
+RESET_CREDIT_EXPIRATION_DAYS = 30
 WINDOW_LABELS_BY_DURATION_MINS = {
     300: "5-hour window",
     10080: "7-day window",
@@ -49,6 +50,14 @@ def format_epoch_local(epoch_seconds: int | float | None) -> str:
         datetime.fromtimestamp(epoch_seconds, timezone.utc)
         .astimezone()
         .strftime("%Y-%m-%d %H:%M:%S %Z")
+    )
+
+
+def format_epoch_local_date(epoch_seconds: int | float | None) -> str:
+    if epoch_seconds is None:
+        return "uncertain"
+    return datetime.fromtimestamp(epoch_seconds, timezone.utc).astimezone().strftime(
+        "%Y-%m-%d"
     )
 
 
@@ -321,6 +330,83 @@ def collect_reset_credit_points(snapshots: list[dict[str, Any]]) -> list[dict[st
     return points
 
 
+def collect_reset_credit_expiration_anchors(
+    snapshots: list[dict[str, Any]],
+) -> list[dict[str, Any]]:
+    lots: list[dict[str, Any]] = []
+    previous_count: int | None = None
+    last_timestamp: int | None = None
+    anchors: list[dict[str, Any]] = []
+    expiration_seconds = RESET_CREDIT_EXPIRATION_DAYS * 24 * 60 * 60
+
+    def copy_lots() -> list[dict[str, Any]]:
+        return [
+            {
+                "position": index,
+                "addedAtText": lot["addedAtText"],
+                "expiresAtText": lot["expiresAtText"],
+                "expiresLabel": lot["expiresLabel"],
+                "uncertain": lot["uncertain"],
+            }
+            for index, lot in enumerate(lots, start=1)
+        ]
+
+    def add_anchor(timestamp: int) -> None:
+        if not lots:
+            return
+        anchors.append(
+            {
+                "timestamp": timestamp,
+                "count": len(lots),
+                "lots": copy_lots(),
+            }
+        )
+
+    for snapshot in snapshots:
+        count = reset_credit_count(snapshot)
+        if count is None:
+            continue
+        timestamp = int(snapshot["collectedAtEpoch"])
+        last_timestamp = timestamp
+        if previous_count is None:
+            lots = [
+                {
+                    "addedAtEpoch": None,
+                    "addedAtText": "already held when first observed",
+                    "expiresAtEpoch": None,
+                    "expiresAtText": "uncertain",
+                    "expiresLabel": "expires uncertain",
+                    "uncertain": True,
+                }
+                for _ in range(count)
+            ]
+            add_anchor(timestamp)
+        elif count > previous_count:
+            for _ in range(count - previous_count):
+                expires_at = timestamp + expiration_seconds
+                lots.append(
+                    {
+                        "addedAtEpoch": timestamp,
+                        "addedAtText": format_epoch_local(timestamp),
+                        "expiresAtEpoch": expires_at,
+                        "expiresAtText": format_epoch_local(expires_at),
+                        "expiresLabel": f"expires {format_epoch_local_date(expires_at)}",
+                        "uncertain": False,
+                    }
+                )
+            add_anchor(timestamp)
+        elif count < previous_count:
+            add_anchor(timestamp)
+            lots = lots[previous_count - count :]
+        previous_count = count
+
+    if last_timestamp is not None and (
+        not anchors or anchors[-1]["timestamp"] != last_timestamp
+    ):
+        add_anchor(last_timestamp)
+    return anchors
+
+
 def _number(value: Any) -> float | None:
     if isinstance(value, (int, float)):
         return float(value)
@@ -385,6 +471,7 @@ def collect_weekly_reset_events(
         current_limits = limit_snapshots(current_snapshot["result"])
         previous_count = reset_credit_count(previous_snapshot)
         current_count = reset_credit_count(current_snapshot)
+        reset_types: list[str] = []
         for limit_id, current_limit in sorted(current_limits.items()):
             previous_limit = previous_limits.get(limit_id)
             if not previous_limit:
@@ -401,25 +488,33 @@ def collect_weekly_reset_events(
             )
             if reset_type is None:
                 continue
-            timestamp = int(current_snapshot["collectedAtEpoch"])
-            events.append(
-                {
-                    "timestamp": timestamp,
-                    "localTime": format_epoch_local(timestamp),
-                    "type": reset_type,
-                    "limit": display_limit_name(limit_id, current_limit),
-                    "previousPercent": previous_window.get("usedPercent"),
-                    "currentPercent": current_window.get("usedPercent"),
-                    "previousResetsAt": format_epoch_local(
-                        previous_window.get("resetsAt")
-                    ),
-                    "currentResetsAt": format_epoch_local(
-                        current_window.get("resetsAt")
-                    ),
-                    "previousResetCredits": previous_count,
-                    "currentResetCredits": current_count,
-                }
-            )
+            reset_types.append(reset_type)
+        if not reset_types:
+            continue
+        timestamp = int(current_snapshot["collectedAtEpoch"])
+        previous_weekly_values = [
+            _number((limit_snapshot.get("secondary") or {}).get("usedPercent"))
+            for limit_snapshot in previous_limits.values()
+        ]
+        previous_weekly_max = max(
+            value for value in previous_weekly_values if value is not None
+        )
+        if "manual" in reset_types:
+            reset_type = "manual"
+        elif "hard" in reset_types:
+            reset_type = "hard"
+        else:
+            reset_type = "natural"
+        events.append(
+            {
+                "timestamp": timestamp,
+                "localTime": format_epoch_local(timestamp),
+                "type": reset_type,
+                "previousWeeklyMaxPercent": previous_weekly_max,
+                "previousResetCredits": previous_count,
+                "currentResetCredits": current_count,
+            }
+        )
     return events
 
 
@@ -461,16 +556,24 @@ def render_svg(snapshots: list[dict[str, Any]]) -> None:
             f" | Reset credits available: {current_reset_credit_count}"
         )
     palette = [
-        "#2563eb",
-        "#dc2626",
-        "#16a34a",
-        "#9333ea",
-        "#ca8a04",
-        "#0891b2",
-        "#be123c",
-        "#4f46e5",
-        "#15803d",
-        "#c2410c",
+        "#0072B2",
+        "#D55E00",
+        "#009E73",
+        "#CC79A7",
+        "#E69F00",
+        "#56B4E9",
+        "#000000",
+        "#F0E442",
+    ]
+    line_dashes = [
+        "",
+        "6 4",
+        "2 4",
+        "9 3 2 3",
+        "12 4",
+        "3 3 9 3",
+        "1 4",
+        "8 2 2 2 2 2",
     ]
     series_data: list[dict[str, Any]] = []
     for index, (label, points) in enumerate(sorted(collect_series(snapshots).items())):
@@ -478,6 +581,7 @@ def render_svg(snapshots: list[dict[str, Any]]) -> None:
             {
                 "label": label,
                 "color": palette[index % len(palette)],
+                "dash": line_dashes[index % len(line_dashes)],
                 "points": [
                     {
                         "timestamp": timestamp,
@@ -490,6 +594,9 @@ def render_svg(snapshots: list[dict[str, Any]]) -> None:
             }
         )
     reset_credit_points = collect_reset_credit_points(snapshots)
+    reset_credit_expiration_anchors = collect_reset_credit_expiration_anchors(
+        snapshots
+    )
     weekly_reset_events = collect_weekly_reset_events(snapshots)
     reset_credit_max_count = max(
         [1] + [int(point["count"]) for point in reset_credit_points]
@@ -507,6 +614,7 @@ def render_svg(snapshots: list[dict[str, Any]]) -> None:
             "resetCredit": {
                 "maxCount": reset_credit_max_count,
                 "points": reset_credit_points,
+                "expirationAnchors": reset_credit_expiration_anchors,
             },
             "weeklyResets": weekly_reset_events,
             "series": series_data,
@@ -670,7 +778,8 @@ function renderSeries(range) {
         d: pathData,
         fill: "none",
         stroke: series.color,
-        "stroke-width": 2.5
+        "stroke-width": 2.5,
+        "stroke-dasharray": series.dash || "none"
       }));
     }
 
@@ -697,6 +806,7 @@ function renderSeries(range) {
       y2: legendY - 4,
       stroke: series.color,
       "stroke-width": 3,
+      "stroke-dasharray": series.dash || "none",
       opacity
     }));
     const label = svgElement("text", {
@@ -714,96 +824,74 @@ function renderSeries(range) {
   emptyMessage.setAttribute("display", visiblePointCount ? "none" : "block");
 }
 
-function weeklyResetColor(type) {
-  if (type === "manual") {
-    return "#ca8a04";
-  }
-  if (type === "hard") {
-    return "#dc2626";
-  }
-  return "#64748b";
-}
-
 function weeklyResetLabel(type) {
   if (type === "manual") {
-    return "Manual weekly reset";
+    return "manual reset";
   }
   if (type === "hard") {
-    return "Hard weekly reset";
+    return "hard reset";
   }
-  return "Natural weekly reset";
+  return "natural reset";
+}
+
+function labelBoxOverlaps(a, b) {
+  return !(
+    a.x + a.width < b.x ||
+    b.x + b.width < a.x ||
+    a.y + a.height < b.y ||
+    b.y + b.height < a.y
+  );
 }
 
 function renderWeeklyResets(range) {
   const layer = document.getElementById("weekly-reset-layer");
-  const legendLayer = document.getElementById("weekly-reset-legend-layer");
   clearChildren(layer);
-  clearChildren(legendLayer);
 
   const visibleEvents = usageData.weeklyResets.filter(
     (event) => event.timestamp >= range.start && event.timestamp <= range.end
   );
+  const placedLabels = [];
   for (const event of visibleEvents) {
-    const x = xPosition(event.timestamp, range);
-    const color = weeklyResetColor(event.type);
-    const line = svgElement("line", {
-      class: "weekly-reset-marker",
-      x1: x.toFixed(2),
-      y1: usageData.top,
-      x2: x.toFixed(2),
-      y2: usageData.top + usageData.plotHeight,
-      stroke: color,
-      "stroke-width": event.type === "hard" ? 2.5 : 1.8,
-      "stroke-dasharray": event.type === "natural" ? "5 6" : "none",
-      opacity: 0.75
-    });
+    const label = weeklyResetLabel(event.type);
+    const pointX = xPosition(event.timestamp, range);
+    const labelWidth = Math.max(72, label.length * 7.2);
+    const labelHeight = 15;
+    const plotRight = usageData.left + usageData.plotWidth;
+    let x = pointX + 8;
+    if (x + labelWidth > plotRight - 4) {
+      x = pointX - labelWidth - 8;
+    }
+    x = Math.max(usageData.left + 4, Math.min(x, plotRight - labelWidth - 4));
+    let y = yPosition(Number(event.previousWeeklyMaxPercent ?? event.previousPercent ?? event.currentPercent ?? 0)) - 8;
+    y = Math.max(usageData.top + 14, Math.min(y, usageData.top + usageData.plotHeight - 6));
+    let box = { x, y: y - labelHeight + 3, width: labelWidth, height: labelHeight };
+    while (placedLabels.some((placed) => labelBoxOverlaps(box, placed))) {
+      y += labelHeight;
+      box = { x, y: y - labelHeight + 3, width: labelWidth, height: labelHeight };
+      if (y > usageData.top + usageData.plotHeight - 6) {
+        break;
+      }
+    }
+    placedLabels.push(box);
+
     const title = svgElement("title");
-    title.textContent = `${weeklyResetLabel(event.type)} - ${event.limit} - ${event.localTime} - weekly usage ${event.previousPercent}% to ${event.currentPercent}% - reset credits ${event.previousResetCredits ?? "unknown"} to ${event.currentResetCredits ?? "unknown"} - previous reset ${event.previousResetsAt} - current reset ${event.currentResetsAt}`;
-    line.appendChild(title);
-    layer.appendChild(line);
-
-    const tag = svgElement("text", {
-      x: x.toFixed(2),
-      y: usageData.top - 8,
-      "text-anchor": "middle",
-      "font-family": "system-ui, -apple-system, sans-serif",
-      "font-size": 10,
-      "font-weight": 700,
-      fill: color
-    });
-    tag.textContent = event.type[0].toUpperCase();
-    tag.appendChild(title.cloneNode(true));
-    layer.appendChild(tag);
-  }
-
-  const legendItems = [
-    ["natural", "Natural reset"],
-    ["manual", "Manual reset"],
-    ["hard", "Hard reset"]
-  ];
-  const baseY = usageData.top + 136;
-  legendItems.forEach(([type, label], index) => {
-    const y = baseY + index * 22;
-    const color = weeklyResetColor(type);
-    legendLayer.appendChild(svgElement("line", {
-      x1: usageData.left + usageData.plotWidth + 28,
-      y1: y - 4,
-      x2: usageData.left + usageData.plotWidth + 48,
-      y2: y - 4,
-      stroke: color,
-      "stroke-width": type === "hard" ? 2.5 : 2,
-      "stroke-dasharray": type === "natural" ? "5 6" : "none"
-    }));
+    title.textContent = `${label} - ${event.localTime} - max weekly usage before reset ${event.previousWeeklyMaxPercent}% - reset credits ${event.previousResetCredits ?? "unknown"} to ${event.currentResetCredits ?? "unknown"}`;
     const text = svgElement("text", {
-      x: usageData.left + usageData.plotWidth + 56,
-      y,
+      class: "weekly-reset-label",
+      x: x.toFixed(2),
+      y: y.toFixed(2),
       "font-family": "system-ui, -apple-system, sans-serif",
-      "font-size": 12,
-      fill: "#0f172a"
+      "font-size": 11,
+      "font-weight": 700,
+      fill: "#334155",
+      stroke: "#ffffff",
+      "stroke-width": 3,
+      "paint-order": "stroke fill"
     });
     text.textContent = label;
-    legendLayer.appendChild(text);
-  });
+    text.appendChild(title);
+    layer.appendChild(text);
+  }
 }
 
 function renderResetCredits(range) {
@@ -858,6 +946,8 @@ function renderResetCredits(range) {
     "stroke-width": 2
   }));
 
+  renderResetCreditExpirationLabels(layer, range, maxCount);
+
   for (const point of points) {
     if (point.carriedForward) {
       continue;
@@ -875,6 +965,44 @@ function renderResetCredits(range) {
     title.textContent = `${point.firstObserved ? "Reset credits first captured in local history" : "Reset credits changed"} - ${point.localTime} - ${point.count}`;
     circle.appendChild(title);
     layer.appendChild(circle);
+  }
+}
+
+function renderResetCreditExpirationLabels(layer, range, maxCount) {
+  const plotLeft = usageData.left;
+  const plotRight = usageData.left + usageData.plotWidth;
+  const labelInset = 8;
+  const visibleAnchors = usageData.resetCredit.expirationAnchors.filter(
+    (anchor) => anchor.timestamp >= range.start && anchor.timestamp <= range.end && anchor.count > 0
+  );
+
+  for (const anchor of visibleAnchors) {
+    const labelX = Math.max(plotLeft + 82, Math.min(plotRight - 4, xPosition(anchor.timestamp, range) - labelInset));
+    anchor.lots.forEach((lot, lotIndex) => {
+      const creditLevel = anchor.count - lotIndex;
+      const y = Math.min(
+        usageData.resetTop + usageData.resetHeight - 3,
+        resetYPosition(creditLevel, maxCount) + 11
+      );
+      const title = svgElement("title");
+      title.textContent = `${lot.expiresLabel} - added ${lot.addedAtText} - ${lot.uncertain ? "uncertain date" : "FIFO 30-day estimate"}`;
+      const text = svgElement("text", {
+        class: "reset-expiration-label",
+        x: labelX.toFixed(2),
+        y: y.toFixed(2),
+        "text-anchor": "end",
+        "font-family": "system-ui, -apple-system, sans-serif",
+        "font-size": 9,
+        "font-weight": 700,
+        fill: "#115e59",
+        stroke: "#ffffff",
+        "stroke-width": 2.5,
+        "paint-order": "stroke fill"
+      });
+      text.textContent = lot.expiresLabel;
+      text.appendChild(title);
+      layer.appendChild(text);
+    });
   }
 }
 
@@ -901,7 +1029,8 @@ render();
         '<rect width="100%" height="100%" fill="#f8fafc"/>',
         "<style>"
         ".usage-point{cursor:crosshair}.usage-point:hover{stroke:#0f172a;stroke-width:2}"
-        ".weekly-reset-marker{cursor:help}.weekly-reset-marker:hover{opacity:1}"
+        ".weekly-reset-label{cursor:help}.weekly-reset-label:hover{fill:#0f172a}"
+        ".reset-expiration-label{cursor:help}.reset-expiration-label:hover{fill:#0f172a}"
         ".usage-control-row{display:flex;align-items:center;gap:8px;"
         "font-family:system-ui,-apple-system,sans-serif;font-size:13px;color:#334155}"
         ".usage-control-row label{display:flex;align-items:center;gap:5px}"
@@ -1005,7 +1134,6 @@ render();
     parts.append('<g id="series-layer"></g>')
     parts.append('<g id="reset-credit-layer"></g>')
     parts.append('<g id="legend-layer"></g>')
-    parts.append('<g id="weekly-reset-legend-layer"></g>')
 
     parts.append(cdata_script(script))
     parts.append("</svg>\n")

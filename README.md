@@ -33,11 +33,17 @@ time windows. When reset-credit data is available, the graph header shows the
 current count and the lower strip shows the first count captured in local
 history plus later count changes over the selected time range. The view
 dropdown only changes what the graph displays; the sampling interval is set by
-the LaunchAgent installer. Weekly usage-limit resets are marked on the main
+the LaunchAgent installer. Weekly usage-limit resets are labeled on the main
 graph as natural, manual, or hard resets. Natural resets are resets observed at
 the scheduled weekly reset time, manual resets are early resets with a reset
 credit decrease, and hard resets are early usage resets without a reset-credit
-decrease.
+decrease. Usage series use colorblind-friendlier colors and distinct line
+styles so color is not the only cue. The graph also shows a FIFO estimate of
+reset-credit expiration dates using Codex's 30-day reset-credit expiration
+rule. Expiration labels are drawn inside the reset-credit strip near the right
+edge of each credit-level segment, with older credits above newer credits.
+Credits already present when local tracking first observed reset-credit data
+are labeled with uncertain expiration dates.
 
 ## Scope
 
