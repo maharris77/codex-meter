@@ -24,7 +24,7 @@ RESET_CREDIT_EVENTS_PATH = OUTPUT_DIR / "reset_credit_events.jsonl"
 SETTINGS_PATH = OUTPUT_DIR / "settings.json"
 READ_TIMEOUT_SECONDS = 30
 CODEX_BIN = "/opt/homebrew/bin/codex"
-PROJECT_VERSION = "0.4.2"
+PROJECT_VERSION = "0.5.0"
 RESET_TIME_TOLERANCE_SECONDS = 10 * 60
 RESET_CREDIT_EXPIRATION_DAYS = 30
 HTML_REFRESH_SECONDS = 30
@@ -624,13 +624,13 @@ def cdata_script(script: str) -> str:
 
 def render_svg(snapshots: list[dict[str, Any]]) -> None:
     width = 1240
-    height = 720
+    height = 760
     left = 78
     right = 360
     top = 132
     plot_width = width - left - right
     plot_height = 360
-    reset_top = 540
+    reset_top = 588
     reset_height = 70
     first = int(snapshots[0]["collectedAtEpoch"])
     last = int(snapshots[-1]["collectedAtEpoch"])
@@ -762,6 +762,15 @@ function formatDate(timestamp) {
   return formatter.format(new Date(timestamp * 1000));
 }
 
+const axisDateFormatter = new Intl.DateTimeFormat(undefined, {
+  month: "short",
+  day: "numeric"
+});
+
+function formatAxisDate(timestamp) {
+  return axisDateFormatter.format(new Date(timestamp * 1000));
+}
+
 function formatPercent(value) {
   return Number.isInteger(value) ? `${value}%` : `${value.toFixed(1)}%`;
 }
@@ -770,7 +779,16 @@ function hasViewPreset(value) {
   return value === "all" || Object.prototype.hasOwnProperty.call(presetSeconds, value);
 }
 
+function queryViewPreset() {
+  const value = new URLSearchParams(window.location.search).get("view");
+  return hasViewPreset(value) ? value : null;
+}
+
 function initialViewPreset() {
+  const requested = queryViewPreset();
+  if (requested !== null) {
+    return requested;
+  }
   return hasViewPreset(usageData.defaultViewPreset) ? usageData.defaultViewPreset : "seven_days";
 }
 
@@ -783,10 +801,44 @@ function selectedIntervalSeconds() {
   return presetSeconds[currentViewPreset];
 }
 
-function visibleRange() {
-  const end = usageData.last;
+function queryRangeEnd() {
+  const rawValue = new URLSearchParams(window.location.search).get("end");
+  if (rawValue === null) {
+    return null;
+  }
+  const value = Number(rawValue);
+  return Number.isFinite(value) ? value : null;
+}
+
+function rangeEndBounds() {
   const interval = selectedIntervalSeconds();
+  if (interval === null) {
+    return { min: usageData.last, max: usageData.last };
+  }
+  return {
+    min: Math.min(usageData.last, usageData.first + interval),
+    max: usageData.last
+  };
+}
+
+function clampRangeEnd(value) {
+  const bounds = rangeEndBounds();
+  if (!Number.isFinite(value)) {
+    return bounds.max;
+  }
+  return Math.max(bounds.min, Math.min(bounds.max, value));
+}
+
+let currentRangeEnd = clampRangeEnd(queryRangeEnd());
+
+function visibleRange() {
+  const interval = selectedIntervalSeconds();
+  const end = interval === null ? usageData.last : clampRangeEnd(currentRangeEnd);
+  currentRangeEnd = end;
   let start = interval === null ? usageData.first : end - interval;
+  if (start < usageData.first) {
+    start = usageData.first;
+  }
   if (start >= end) {
     start = end - 1;
   }
@@ -841,12 +893,23 @@ function dayBoundaryTimestamps(range) {
   return boundaries;
 }
 
+function dayLabelIntervalDays(range) {
+  const spanDays = Math.max(1, (range.end - range.start) / (24 * 60 * 60));
+  const maxLabels = Math.max(1, Math.floor(usageData.plotWidth / 86));
+  return Math.max(1, Math.ceil(spanDays / maxLabels));
+}
+
 function renderDayBoundaries(range) {
   const layer = document.getElementById("day-grid");
+  const labelLayer = document.getElementById("day-label-layer");
   const resetLayer = document.getElementById("reset-day-grid");
+  const resetLabelLayer = document.getElementById("reset-day-label-layer");
   clearChildren(layer);
+  clearChildren(labelLayer);
   clearChildren(resetLayer);
-  for (const timestamp of dayBoundaryTimestamps(range)) {
+  clearChildren(resetLabelLayer);
+  const labelInterval = dayLabelIntervalDays(range);
+  dayBoundaryTimestamps(range).forEach((timestamp, index) => {
     const x = xPosition(timestamp, range);
     layer.appendChild(svgElement("line", {
       x1: x.toFixed(2),
@@ -866,7 +929,36 @@ function renderDayBoundaries(range) {
       "stroke-width": 1,
       "stroke-dasharray": "4 6"
     }));
-  }
+    if (index % labelInterval === 0) {
+      const plotRight = usageData.left + usageData.plotWidth;
+      let anchor = "middle";
+      if (x < usageData.left + 28) {
+        anchor = "start";
+      } else if (x > plotRight - 28) {
+        anchor = "end";
+      }
+      const label = svgElement("text", {
+        x: x.toFixed(2),
+        y: (usageData.top + usageData.plotHeight + 20).toFixed(2),
+        "text-anchor": anchor,
+        "font-family": "system-ui, -apple-system, sans-serif",
+        "font-size": 11,
+        fill: "#64748b"
+      });
+      label.textContent = formatAxisDate(timestamp);
+      labelLayer.appendChild(label);
+      const resetLabel = svgElement("text", {
+        x: x.toFixed(2),
+        y: (usageData.resetTop + usageData.resetHeight + 18).toFixed(2),
+        "text-anchor": anchor,
+        "font-family": "system-ui, -apple-system, sans-serif",
+        "font-size": 11,
+        fill: "#64748b"
+      });
+      resetLabel.textContent = formatAxisDate(timestamp);
+      resetLabelLayer.appendChild(resetLabel);
+    }
+  });
 }
 
 function renderSeries(range) {
@@ -1122,6 +1214,28 @@ function renderResetCreditExpirationLabels(layer, range, maxCount) {
 function render() {
   document.getElementById("view-preset").value = currentViewPreset;
   const range = visibleRange();
+  const interval = selectedIntervalSeconds();
+  const bounds = rangeEndBounds();
+  const panText = interval === null
+    ? "All recorded history"
+    : `Window ending ${formatDate(range.end)}`;
+  document.querySelectorAll(".range-end").forEach((rangeSlider) => {
+    rangeSlider.min = String(bounds.min);
+    rangeSlider.max = String(bounds.max);
+    rangeSlider.step = "300";
+    rangeSlider.value = String(range.end);
+    rangeSlider.disabled = interval === null || bounds.min === bounds.max;
+  });
+  document.querySelectorAll(".pan-label").forEach((label) => {
+    label.textContent = panText;
+  });
+  if (window.parent !== window) {
+    window.parent.postMessage({
+      type: "codex-meter-view-preset",
+      value: currentViewPreset,
+      end: range.end
+    }, "*");
+  }
   document.getElementById("start-label").textContent = formatDate(range.start);
   document.getElementById("end-label").textContent = formatDate(range.end);
   document.getElementById("range-label").textContent = `${formatDate(range.start)} to ${formatDate(range.end)}`;
@@ -1134,7 +1248,14 @@ function render() {
 const viewPresetSelect = document.getElementById("view-preset");
 viewPresetSelect.addEventListener("change", () => {
   currentViewPreset = hasViewPreset(viewPresetSelect.value) ? viewPresetSelect.value : initialViewPreset();
+  currentRangeEnd = usageData.last;
   render();
+});
+document.querySelectorAll(".range-end").forEach((rangeEndInput) => {
+  rangeEndInput.addEventListener("input", () => {
+    currentRangeEnd = clampRangeEnd(Number(rangeEndInput.value));
+    render();
+  });
 });
 render();
 """.replace("__USAGE_DATA__", data_json)
@@ -1155,6 +1276,10 @@ render();
         ".usage-control-row select{height:28px;"
         "box-sizing:border-box;border:1px solid #cbd5e1;border-radius:4px;"
         "background:#fff;color:#0f172a;padding:3px 6px;font:inherit}"
+        ".usage-pan-row{display:flex;align-items:center;gap:10px;"
+        "font-family:system-ui,-apple-system,sans-serif;font-size:12px;color:#334155}"
+        ".usage-pan-row input[type=range]{flex:1;min-width:0}"
+        ".usage-pan-row input[type=range]:disabled{opacity:.45}"
         "</style>",
         '<text x="32" y="34" font-family="system-ui, -apple-system, sans-serif" '
         'font-size="22" font-weight="700" fill="#0f172a">Codex usage limits</text>',
@@ -1187,6 +1312,19 @@ render();
 
     parts.append('<g id="day-grid"></g>')
     parts.append('<g id="weekly-reset-layer"></g>')
+    parts.append('<g id="day-label-layer"></g>')
+    parts.append(
+        f'<foreignObject x="{left}" y="{top + plot_height + 28}" '
+        f'width="{plot_width}" height="28">'
+    )
+    parts.append(
+        '<div xmlns="http://www.w3.org/1999/xhtml" class="usage-pan-row">'
+        '<span>Browse usage</span>'
+        '<input class="range-end" type="range"/>'
+        '<span class="pan-label"></span>'
+        '</div>'
+    )
+    parts.append("</foreignObject>")
     expiry_x = left + plot_width + 28
     reset_summary_y = top + 18 + len(series_data) * 24 + 32
     parts.append(
@@ -1281,6 +1419,7 @@ render();
         'stroke="#e2e8f0"/>'
     )
     parts.append('<g id="reset-day-grid"></g>')
+    parts.append('<g id="reset-day-label-layer"></g>')
 
     parts.append(
         f'<text id="start-label" x="{left}" y="{height - 36}" '
@@ -1292,6 +1431,18 @@ render();
         'font-family="system-ui, -apple-system, sans-serif" '
         'font-size="12" fill="#475569"></text>'
     )
+    parts.append(
+        f'<foreignObject x="{left}" y="{reset_top + reset_height + 30}" '
+        f'width="{plot_width}" height="28">'
+    )
+    parts.append(
+        '<div xmlns="http://www.w3.org/1999/xhtml" class="usage-pan-row">'
+        '<span>Browse reset credits</span>'
+        '<input class="range-end" type="range"/>'
+        '<span class="pan-label"></span>'
+        '</div>'
+    )
+    parts.append("</foreignObject>")
     parts.append(
         f'<text id="empty-message" x="{left + plot_width / 2:.2f}" '
         f'y="{top + plot_height / 2:.2f}" text-anchor="middle" '
@@ -1316,6 +1467,7 @@ render();
 
 
 def render_html() -> None:
+    view_presets_json = json.dumps(VIEW_PRESETS, separators=(",", ":"))
     HTML_PATH.write_text(
         f"""<!doctype html>
 <html lang="en">
@@ -1356,11 +1508,38 @@ def render_html() -> None:
   <div id="status"></div>
   <script>
     const refreshSeconds = {HTML_REFRESH_SECONDS};
+    const validViewPresets = new Set({view_presets_json});
     const graphFrame = document.getElementById("graph-frame");
     const status = document.getElementById("status");
+    let selectedViewPreset = null;
+    let selectedRangeEnd = null;
+
+    window.addEventListener("message", (event) => {{
+      const data = event.data;
+      if (
+        data
+        && data.type === "codex-meter-view-preset"
+        && validViewPresets.has(data.value)
+      ) {{
+        selectedViewPreset = data.value;
+        selectedRangeEnd = Number.isFinite(data.end) ? data.end : selectedRangeEnd;
+      }}
+    }});
+
+    function graphUrl() {{
+      const params = new URLSearchParams();
+      params.set("updated", Date.now().toString());
+      if (selectedViewPreset !== null) {{
+        params.set("view", selectedViewPreset);
+      }}
+      if (selectedRangeEnd !== null) {{
+        params.set("end", String(selectedRangeEnd));
+      }}
+      return `usage.svg?${{params.toString()}}`;
+    }}
 
     function refreshGraph() {{
-      graphFrame.src = `usage.svg?updated=${{Date.now()}}`;
+      graphFrame.src = graphUrl();
       status.textContent = `Refreshed ${{new Date().toLocaleString()}}`;
     }}
 

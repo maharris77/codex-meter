@@ -6,8 +6,9 @@ and renders them as a history graph.
 ![Example Codex usage graph](docs/example-usage.png)
 
 The generated SVG is interactive: use the view dropdown to switch time windows,
-and hover over plotted dots to see the model, window, collection time, and
-percent used.
+use the synchronized browse controls below the plots to pan that window through
+older history, and hover over plotted dots to see the model, window, collection
+time, and percent used.
 
 Codex already shows current usage. This tool keeps a local timeline so you can
 see how each returned limit changes over time, including the 5-hour and 7-day
@@ -52,11 +53,14 @@ chooses another default view. Set `defaultViewPreset` in
 `one_day`, `seven_days`, `thirty_days`, or `all`. The repo default remains
 `seven_days`; missing or invalid settings fall back to that default. The
 view dropdown reflects the current open graph view, starting from the configured
-default and changing only when you choose another view. When reset-credit data
-is available, the graph header shows the current count and the lower strip shows
-the first count captured in local history plus later count changes over the
-selected time range. The view dropdown only changes what the graph displays; the
-sampling interval is set by the LaunchAgent installer.
+default and changing only when you choose another view. The synchronized browse
+controls below the usage graph and reset-credit graph pan the selected time
+window through older snapshots; both graphs stay locked to the same visible
+range. When reset-credit data is available, the graph header shows the current
+count and the lower strip shows the first count captured in local history plus
+later count changes over the selected time range. The view dropdown and browse
+controls only change what the graph displays; the sampling interval is set by
+the LaunchAgent installer.
 Weekly usage-limit resets are labeled on the main graph as natural, manual, or
 hard resets. Natural resets are resets observed at the scheduled weekly reset
 time, manual resets are early resets with a reset credit decrease, and hard
@@ -134,7 +138,9 @@ open -a Safari "$HOME/Documents/Archives/Codex Meter/usage.html"
 ```
 
 It reloads the graph every 30 seconds, so a browser left open picks up the next
-collector-written SVG without a manual refresh.
+collector-written SVG without a manual refresh. The configured default view is
+used when the HTML file first opens; timed refreshes keep the current graph view
+selected in the dropdown.
 
 ## Run On Startup
 
