@@ -991,7 +991,7 @@ function renderResetCreditExpirationLabels(layer, range, maxCount) {
         resetYPosition(creditLevel, maxCount) + 11
       );
       const title = svgElement("title");
-      title.textContent = `${lot.expiresLabel} - added ${lot.addedAtText} - ${lot.uncertain ? "uncertain date" : "FIFO 30-day estimate"}`;
+      title.textContent = `${lot.expiresLabel} - added ${lot.addedAtText} - ${lot.uncertain ? "uncertain date" : "current estimate based on 30-day expiration"}`;
       const text = svgElement("text", {
         class: "reset-expiration-label",
         x: labelX.toFixed(2),
@@ -1093,7 +1093,7 @@ render();
         parts.append(
             f'<text x="{expiry_x}" y="{expiry_y + 18}" '
             'font-family="system-ui, -apple-system, sans-serif" '
-            'font-size="10" fill="#64748b">Current FIFO estimate; 30-day expiration</text>'
+            'font-size="10" fill="#64748b">Current estimate based on 30-day expiration</text>'
         )
         for index, row in enumerate(reset_credit_expiration_rows, start=1):
             row_y = expiry_y + 18 + index * 28
