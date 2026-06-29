@@ -5,10 +5,10 @@ and renders them as a history graph.
 
 ![Example Codex usage graph](docs/example-usage.png)
 
-The generated SVG is interactive: use the view dropdown to switch time windows,
-use the synchronized browse controls below the plots to pan that window through
-older history, and hover over plotted dots to see the model, window, collection
-time, and percent used.
+The generated SVG is interactive: use the view dropdown to switch time windows
+or choose a custom range, use the synchronized browse controls below the plots
+to pan that window through older history, toggle individual usage-limit lines,
+hide supplemental graphs, and hover over plotted dots for details.
 
 Codex already shows current usage. This tool keeps a local timeline so you can
 see how each returned limit changes over time, including the 5-hour and 7-day
@@ -26,7 +26,7 @@ threads or delegated workers and current usage needs to guide scheduling.
 - Use weekly quota intentionally, including deciding when to keep a run going
   after a weekly cap is reached so in-flight work can finish.
 - Plan work and ETAs from observed reset times, usage slopes, reset-credit
-  availability, and natural/manual/hard reset events.
+  availability, flexible credit balance, and natural/manual/hard reset events.
 - Let another local project read `latest.json` or `snapshots.jsonl` for bounded
   quota-aware coordination without scraping a UI.
 
@@ -47,30 +47,42 @@ snapshot, Codex Meter appends an event to
 `~/Documents/Archives/Codex Meter/reset_credit_events.jsonl` and sends a macOS
 notification.
 
+When the response includes Codex flexible credits, Codex Meter tracks
+`credits.balance` separately from reset credits. Balance changes are appended to
+`~/Documents/Archives/Codex Meter/flexible_credit_events.jsonl`, and the balance
+is plotted as a separate flexible-credit graph below the reset-credit graph.
+
 The SVG graph defaults to the past 7 days unless the local settings file
 chooses another default view. Set `defaultViewPreset` in
 `~/Documents/Archives/Codex Meter/settings.json` to one of `five_hours`,
 `one_day`, `seven_days`, `thirty_days`, or `all`. The repo default remains
 `seven_days`; missing or invalid settings fall back to that default. The
 view dropdown reflects the current open graph view, starting from the configured
-default and changing only when you choose another view. The synchronized browse
-controls below the usage graph and reset-credit graph pan the selected time
-window through older snapshots; both graphs stay locked to the same visible
-range. When reset-credit data is available, the graph header shows the current
-count and the lower strip shows the first count captured in local history plus
-later count changes over the selected time range. The view dropdown and browse
-controls only change what the graph displays; the sampling interval is set by
-the LaunchAgent installer.
-Weekly usage-limit resets are labeled on the main graph as natural, manual, or
-hard resets. Natural resets are resets observed at the scheduled weekly reset
-time, manual resets are early resets with a reset credit decrease, and hard
-resets are early usage resets without a reset-credit decrease. Usage series use
-colorblind-friendlier colors and distinct line styles so color is not the only
-cue. The right side of the graph shows Codex's next natural 5-hour and weekly
-reset times. If the weekly reset is due before the 5-hour reset, the 5-hour
-line uses the weekly reset time because local history shows the Codex 5-hour
-window resets with that weekly reset. This summary is only for the main Codex
-limit; Spark remains a separate graphed series.
+default and changing only when you choose another view. The custom range option
+shows start and end fields for choosing an exact local time range. The
+synchronized browse controls below the usage, reset-credit, and flexible-credit
+graphs pan the selected time window through older snapshots; visible graphs stay
+locked to the same range. The line toggles show or hide individual usage-limit
+series on the main graph, and the supplemental graph toggles show or hide reset
+credits and flexible credits.
+When reset-credit data is available, the graph header shows the current count
+and the reset-credit strip shows the first count captured in local history plus
+later count changes over the selected time range. Flexible credit balance is
+shown in a separate lower graph and is not a reset-credit count. The view
+dropdown and browse controls only change what the graph displays; the sampling
+interval is set by the LaunchAgent installer.
+Weekly usage-limit resets are labeled on the main graph as natural, manual,
+hard, or uncertain early resets. Natural resets are resets observed at the
+scheduled weekly reset time, manual resets are early resets with a reset-credit
+decrease, hard resets are early usage resets when reset-credit data is present
+and did not decrease, and `early reset (?)` means the reset happened early but
+reset-credit data was unavailable, so manual versus hard cannot be determined.
+Usage series use colorblind-friendlier colors and distinct line styles so color
+is not the only cue. The right side of the graph shows Codex's next natural
+5-hour and weekly reset times. If the weekly reset is due before the 5-hour
+reset, the 5-hour line uses the weekly reset time because local history shows
+the Codex 5-hour window resets with that weekly reset. This summary is only for
+the main Codex limit; Spark remains a separate graphed series.
 The graph also shows a current estimate based on Codex's 30-day
 reset-credit expiration rule. Expiration labels are drawn inside the
 reset-credit strip just left of each visible credit-count change and the present
@@ -116,6 +128,8 @@ The command writes or updates the files under
 
 When the reset-credit count changes, Codex Meter also writes
 `~/Documents/Archives/Codex Meter/reset_credit_events.jsonl`.
+When the flexible credit balance changes, it writes
+`~/Documents/Archives/Codex Meter/flexible_credit_events.jsonl`.
 
 ## Open The Graph
 

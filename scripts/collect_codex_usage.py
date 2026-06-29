@@ -21,6 +21,7 @@ LATEST_PATH = OUTPUT_DIR / "latest.json"
 SVG_PATH = OUTPUT_DIR / "usage.svg"
 HTML_PATH = OUTPUT_DIR / "usage.html"
 RESET_CREDIT_EVENTS_PATH = OUTPUT_DIR / "reset_credit_events.jsonl"
+FLEXIBLE_CREDIT_EVENTS_PATH = OUTPUT_DIR / "flexible_credit_events.jsonl"
 SETTINGS_PATH = OUTPUT_DIR / "settings.json"
 READ_TIMEOUT_SECONDS = 30
 CODEX_BIN = "/opt/homebrew/bin/codex"
@@ -29,13 +30,21 @@ RESET_TIME_TOLERANCE_SECONDS = 10 * 60
 RESET_CREDIT_EXPIRATION_DAYS = 30
 HTML_REFRESH_SECONDS = 30
 DEFAULT_VIEW_PRESET = "seven_days"
-VIEW_PRESETS = ("five_hours", "one_day", "seven_days", "thirty_days", "all")
+VIEW_PRESETS = (
+    "five_hours",
+    "one_day",
+    "seven_days",
+    "thirty_days",
+    "all",
+    "custom",
+)
 VIEW_PRESET_LABELS = {
     "five_hours": "Last 5 hours",
     "one_day": "Last 24 hours",
     "seven_days": "Last 7 days",
     "thirty_days": "Last 30 days",
     "all": "All data",
+    "custom": "Custom range",
 }
 WINDOW_LABELS_BY_DURATION_MINS = {
     300: "5-hour window",
@@ -229,7 +238,11 @@ def load_settings() -> dict[str, Any]:
 
 def load_default_view_preset() -> str:
     default_view_preset = load_settings().get("defaultViewPreset")
-    if isinstance(default_view_preset, str) and default_view_preset in VIEW_PRESETS:
+    if (
+        isinstance(default_view_preset, str)
+        and default_view_preset in VIEW_PRESETS
+        and default_view_preset != "custom"
+    ):
         return default_view_preset
     return DEFAULT_VIEW_PRESET
 
@@ -250,6 +263,51 @@ def reset_credit_count(snapshot: dict[str, Any] | None) -> int | None:
     if isinstance(available_count, int):
         return available_count
     return None
+
+
+def flexible_credit_state(snapshot: dict[str, Any] | None) -> dict[str, Any] | None:
+    if snapshot is None:
+        return None
+    result = snapshot.get("result", {})
+    if not isinstance(result, dict):
+        return None
+    codex_limit = (result.get("rateLimitsByLimitId") or {}).get("codex")
+    credits = codex_limit.get("credits") if isinstance(codex_limit, dict) else None
+    if not isinstance(credits, dict):
+        primary_limit = result.get("rateLimits")
+        credits = (
+            primary_limit.get("credits") if isinstance(primary_limit, dict) else None
+        )
+    if not isinstance(credits, dict):
+        return None
+
+    balance = credits.get("balance")
+    if isinstance(balance, (int, float)):
+        balance_text = str(balance)
+        balance_value = float(balance)
+    elif isinstance(balance, str) and balance:
+        balance_text = balance
+        try:
+            balance_value = float(balance)
+        except ValueError:
+            return None
+    else:
+        return None
+
+    return {
+        "balance": balance_value,
+        "balanceText": balance_text,
+        "hasCredits": bool(credits.get("hasCredits")),
+        "unlimited": bool(credits.get("unlimited")),
+    }
+
+
+def flexible_credit_change_key(state: dict[str, Any]) -> tuple[float, bool, bool]:
+    return (
+        float(state["balance"]),
+        bool(state["hasCredits"]),
+        bool(state["unlimited"]),
+    )
 
 
 def record_reset_credit_change(
@@ -301,6 +359,50 @@ def alert_if_reset_credit_count_changed(
         current_snapshot,
         previous_count,
         current_count,
+    )
+
+
+def record_flexible_credit_change(
+    previous_snapshot: dict[str, Any],
+    current_snapshot: dict[str, Any],
+    previous_state: dict[str, Any],
+    current_state: dict[str, Any],
+) -> None:
+    event = {
+        "changedAt": current_snapshot["collectedAt"],
+        "changedAtEpoch": current_snapshot["collectedAtEpoch"],
+        "previousCollectedAt": previous_snapshot["collectedAt"],
+        "previousBalance": previous_state["balanceText"],
+        "previousHasCredits": previous_state["hasCredits"],
+        "previousUnlimited": previous_state["unlimited"],
+        "currentBalance": current_state["balanceText"],
+        "currentHasCredits": current_state["hasCredits"],
+        "currentUnlimited": current_state["unlimited"],
+    }
+    with FLEXIBLE_CREDIT_EVENTS_PATH.open("a", encoding="utf-8") as handle:
+        handle.write(json.dumps(event, separators=(",", ":"), sort_keys=True))
+        handle.write("\n")
+
+
+def record_if_flexible_credit_changed(
+    previous_snapshot: dict[str, Any] | None,
+    current_snapshot: dict[str, Any],
+) -> None:
+    if previous_snapshot is None:
+        return
+    previous_state = flexible_credit_state(previous_snapshot)
+    current_state = flexible_credit_state(current_snapshot)
+    if previous_state is None or current_state is None:
+        return
+    if flexible_credit_change_key(previous_state) == flexible_credit_change_key(
+        current_state
+    ):
+        return
+    record_flexible_credit_change(
+        previous_snapshot,
+        current_snapshot,
+        previous_state,
+        current_state,
     )
 
 
@@ -384,6 +486,34 @@ def collect_reset_credit_points(snapshots: list[dict[str, Any]]) -> list[dict[st
             }
         )
         previous_count = count
+    return points
+
+
+def collect_flexible_credit_points(
+    snapshots: list[dict[str, Any]],
+) -> list[dict[str, Any]]:
+    points: list[dict[str, Any]] = []
+    previous_key: tuple[float, bool, bool] | None = None
+    for snapshot in snapshots:
+        state = flexible_credit_state(snapshot)
+        if state is None:
+            continue
+        key = flexible_credit_change_key(state)
+        if key == previous_key:
+            continue
+        timestamp = int(snapshot["collectedAtEpoch"])
+        points.append(
+            {
+                "timestamp": timestamp,
+                "balance": state["balance"],
+                "balanceText": state["balanceText"],
+                "hasCredits": state["hasCredits"],
+                "unlimited": state["unlimited"],
+                "localTime": format_epoch_local(timestamp),
+                "firstObserved": previous_key is None,
+            }
+        )
+        previous_key = key
     return points
 
 
@@ -500,11 +630,6 @@ def classify_weekly_reset(
 
     previous_count = reset_credit_count(previous_snapshot)
     current_count = reset_credit_count(current_snapshot)
-    reset_credit_decreased = (
-        previous_count is not None
-        and current_count is not None
-        and current_count < previous_count
-    )
     scheduled_reset_reached = (
         current_collected + RESET_TIME_TOLERANCE_SECONDS >= previous_reset
     )
@@ -512,9 +637,15 @@ def classify_weekly_reset(
 
     if scheduled_reset_reached:
         return "natural"
-    if reset_credit_decreased:
+    if (
+        previous_count is not None
+        and current_count is not None
+        and current_count < previous_count
+    ):
         return "manual"
     if usage_dropped:
+        if previous_count is None or current_count is None:
+            return "early_unknown"
         return "hard"
     return None
 
@@ -553,13 +684,20 @@ def collect_weekly_reset_events(
             _number((limit_snapshot.get("secondary") or {}).get("usedPercent"))
             for limit_snapshot in previous_limits.values()
         ]
-        previous_weekly_max = max(
+        known_previous_weekly_values = [
             value for value in previous_weekly_values if value is not None
+        ]
+        previous_weekly_max = (
+            max(known_previous_weekly_values)
+            if known_previous_weekly_values
+            else 0
         )
         if "manual" in reset_types:
             reset_type = "manual"
         elif "hard" in reset_types:
             reset_type = "hard"
+        elif "early_unknown" in reset_types:
+            reset_type = "early_unknown"
         else:
             reset_type = "natural"
         events.append(
@@ -624,14 +762,16 @@ def cdata_script(script: str) -> str:
 
 def render_svg(snapshots: list[dict[str, Any]]) -> None:
     width = 1240
-    height = 760
+    height = 980
     left = 78
     right = 360
-    top = 132
+    top = 168
     plot_width = width - left - right
-    plot_height = 360
-    reset_top = 588
+    plot_height = 340
+    reset_top = 610
     reset_height = 70
+    flexible_top = 790
+    flexible_height = 70
     first = int(snapshots[0]["collectedAtEpoch"])
     last = int(snapshots[-1]["collectedAtEpoch"])
     last_collected = format_epoch_local(last)
@@ -640,6 +780,12 @@ def render_svg(snapshots: list[dict[str, Any]]) -> None:
     if current_reset_credit_count is not None:
         header_status += (
             f" | Reset credits available: {current_reset_credit_count}"
+        )
+    current_flexible_credit_state = flexible_credit_state(snapshots[-1])
+    if current_flexible_credit_state is not None:
+        header_status += (
+            " | Flexible credit balance: "
+            f"{current_flexible_credit_state['balanceText']}"
         )
     palette = [
         "#0072B2",
@@ -680,6 +826,7 @@ def render_svg(snapshots: list[dict[str, Any]]) -> None:
             }
         )
     reset_credit_points = collect_reset_credit_points(snapshots)
+    flexible_credit_points = collect_flexible_credit_points(snapshots)
     reset_credit_expiration_anchors = collect_reset_credit_expiration_anchors(
         snapshots
     )
@@ -693,6 +840,9 @@ def render_svg(snapshots: list[dict[str, Any]]) -> None:
     reset_credit_max_count = max(
         [1] + [int(point["count"]) for point in reset_credit_points]
     )
+    flexible_credit_max_balance = max(
+        [1.0] + [float(point["balance"]) for point in flexible_credit_points]
+    )
     selected_view_preset = load_default_view_preset()
 
     def view_preset_option(value: str) -> str:
@@ -702,6 +852,15 @@ def render_svg(snapshots: list[dict[str, Any]]) -> None:
 
     view_preset_options = "".join(
         view_preset_option(value) for value in VIEW_PRESETS
+    )
+    series_controls = "".join(
+        (
+            '<label class="series-choice">'
+            f'<input class="series-toggle" type="checkbox" data-series-index="{index}" checked="checked"/>'
+            f'<span style="border-color:{html.escape(series["color"])}"></span>'
+            f'{html.escape(series["label"])}</label>'
+        )
+        for index, series in enumerate(series_data)
     )
     data_json = json.dumps(
         {
@@ -714,11 +873,17 @@ def render_svg(snapshots: list[dict[str, Any]]) -> None:
             "plotHeight": plot_height,
             "resetTop": reset_top,
             "resetHeight": reset_height,
+            "flexibleTop": flexible_top,
+            "flexibleHeight": flexible_height,
             "resetCredit": {
                 "maxCount": reset_credit_max_count,
                 "points": reset_credit_points,
                 "expirationAnchors": reset_credit_expiration_anchors,
                 "expirationRows": reset_credit_expiration_rows,
+            },
+            "flexibleCredit": {
+                "maxBalance": flexible_credit_max_balance,
+                "points": flexible_credit_points,
             },
             "weeklyResets": weekly_reset_events,
             "series": series_data,
@@ -728,12 +893,14 @@ def render_svg(snapshots: list[dict[str, Any]]) -> None:
     script = """
 const usageData = __USAGE_DATA__;
 const svgNS = "http://www.w3.org/2000/svg";
+const queryParams = new URLSearchParams(window.location.search);
 const presetSeconds = {
   five_hours: 5 * 60 * 60,
   one_day: 24 * 60 * 60,
   seven_days: 7 * 24 * 60 * 60,
   thirty_days: 30 * 24 * 60 * 60
 };
+const allSeriesIndexes = usageData.series.map((_, index) => index);
 const formatter = new Intl.DateTimeFormat(undefined, {
   year: "numeric",
   month: "2-digit",
@@ -776,11 +943,11 @@ function formatPercent(value) {
 }
 
 function hasViewPreset(value) {
-  return value === "all" || Object.prototype.hasOwnProperty.call(presetSeconds, value);
+  return value === "all" || value === "custom" || Object.prototype.hasOwnProperty.call(presetSeconds, value);
 }
 
 function queryViewPreset() {
-  const value = new URLSearchParams(window.location.search).get("view");
+  const value = queryParams.get("view");
   return hasViewPreset(value) ? value : null;
 }
 
@@ -794,15 +961,66 @@ function initialViewPreset() {
 
 let currentViewPreset = initialViewPreset();
 
+function queryEpochParam(name) {
+  const rawValue = queryParams.get(name);
+  if (rawValue === null) {
+    return null;
+  }
+  const value = Number(rawValue);
+  return Number.isFinite(value) ? value : null;
+}
+
+function normalizeCustomRange() {
+  const defaultEnd = usageData.last;
+  const defaultStart = Math.max(usageData.first, defaultEnd - presetSeconds.seven_days);
+  if (!Number.isFinite(customStart) || !Number.isFinite(customEnd)) {
+    customStart = defaultStart;
+    customEnd = defaultEnd;
+  }
+  customStart = Math.max(usageData.first, Math.min(usageData.last - 1, customStart));
+  customEnd = Math.max(customStart + 1, Math.min(usageData.last, customEnd));
+}
+
+let customStart = queryEpochParam("start");
+let customEnd = queryEpochParam("end");
+normalizeCustomRange();
+
+function queryActiveSeriesIndexes() {
+  const rawValue = queryParams.get("series");
+  if (rawValue === null) {
+    return new Set(allSeriesIndexes);
+  }
+  const selected = new Set();
+  rawValue.split(",").forEach((part) => {
+    const index = Number(part);
+    if (Number.isInteger(index) && index >= 0 && index < usageData.series.length) {
+      selected.add(index);
+    }
+  });
+  return selected;
+}
+
+function queryVisibleFlag(name) {
+  return queryParams.get(name) !== "0";
+}
+
+let activeSeriesIndexes = queryActiveSeriesIndexes();
+let resetGraphVisible = queryVisibleFlag("resetGraph");
+let flexibleGraphVisible = queryVisibleFlag("flexibleGraph");
+
 function selectedIntervalSeconds() {
   if (currentViewPreset === "all") {
     return null;
+  }
+  if (currentViewPreset === "custom") {
+    normalizeCustomRange();
+    return Math.max(1, customEnd - customStart);
   }
   return presetSeconds[currentViewPreset];
 }
 
 function queryRangeEnd() {
-  const rawValue = new URLSearchParams(window.location.search).get("end");
+  const rawValue = queryParams.get("end");
   if (rawValue === null) {
     return null;
   }
@@ -829,7 +1047,58 @@ function clampRangeEnd(value) {
   return Math.max(bounds.min, Math.min(bounds.max, value));
 }
 
-let currentRangeEnd = clampRangeEnd(queryRangeEnd());
+let currentRangeEnd = clampRangeEnd(
+  currentViewPreset === "custom" ? customEnd : queryRangeEnd()
+);
+let activeScroller = null;
+let isSyncingScroll = false;
+let scrollIdleTimer = null;
+
+function scrollMetrics() {
+  const bounds = rangeEndBounds();
+  const span = Math.max(0, bounds.max - bounds.min);
+  return {
+    bounds,
+    span,
+    scale: span > 0 ? 1 / 300 : 1
+  };
+}
+
+function scrollerMax(scroller) {
+  return Math.max(0, scroller.scrollWidth - scroller.clientWidth);
+}
+
+function rangeEndToScrollLeft(scroller, rangeEnd) {
+  const metrics = scrollMetrics();
+  if (metrics.span <= 0) {
+    return 0;
+  }
+  const ratio = (clampRangeEnd(rangeEnd) - metrics.bounds.min) / metrics.span;
+  return ratio * scrollerMax(scroller);
+}
+
+function scrollLeftToRangeEnd(scroller) {
+  const metrics = scrollMetrics();
+  const maxScroll = scrollerMax(scroller);
+  if (metrics.span <= 0 || maxScroll <= 0) {
+    return metrics.bounds.max;
+  }
+  return clampRangeEnd(metrics.bounds.min + (scroller.scrollLeft / maxScroll) * metrics.span);
+}
+
+function syncScroller(scroller, rangeEnd) {
+  const metrics = scrollMetrics();
+  const filler = scroller.querySelector(".history-scroll-fill");
+  filler.style.width = `${Math.max(scroller.clientWidth + 1, Math.ceil(metrics.span * metrics.scale) + scroller.clientWidth)}px`;
+  const targetScrollLeft = rangeEndToScrollLeft(scroller, rangeEnd);
+  if (Math.abs(scroller.scrollLeft - targetScrollLeft) > 1) {
+    isSyncingScroll = true;
+    scroller.scrollLeft = targetScrollLeft;
+    window.setTimeout(() => {
+      isSyncingScroll = false;
+    }, 0);
+  }
+}
 
 function visibleRange() {
   const interval = selectedIntervalSeconds();
@@ -841,6 +1110,10 @@ function visibleRange() {
   }
   if (start >= end) {
     start = end - 1;
+  }
+  if (currentViewPreset === "custom") {
+    customStart = start;
+    customEnd = end;
   }
   return { start, end };
 }
@@ -860,6 +1133,11 @@ function resetYPosition(count, maxCount) {
   return usageData.resetTop + ((maxCount - clamped) / maxCount) * usageData.resetHeight;
 }
 
+function flexibleYPosition(balance, maxBalance) {
+  const clamped = Math.max(0, Math.min(maxBalance, balance));
+  return usageData.flexibleTop + ((maxBalance - clamped) / maxBalance) * usageData.flexibleHeight;
+}
+
 function resetVisiblePoints(range) {
   const allPoints = usageData.resetCredit.points;
   const points = allPoints.filter(
@@ -871,6 +1149,27 @@ function resetVisiblePoints(range) {
     points.unshift({
       timestamp: range.start,
       count: previous.count,
+      localTime: previous.localTime,
+      carriedForward: true
+    });
+  }
+  return points;
+}
+
+function flexibleVisiblePoints(range) {
+  const allPoints = usageData.flexibleCredit.points;
+  const points = allPoints.filter(
+    (point) => point.timestamp >= range.start && point.timestamp <= range.end
+  );
+  const previousPoints = allPoints.filter((point) => point.timestamp < range.start);
+  if (previousPoints.length) {
+    const previous = previousPoints[previousPoints.length - 1];
+    points.unshift({
+      timestamp: range.start,
+      balance: previous.balance,
+      balanceText: previous.balanceText,
+      hasCredits: previous.hasCredits,
+      unlimited: previous.unlimited,
       localTime: previous.localTime,
       carriedForward: true
     });
@@ -904,10 +1203,14 @@ function renderDayBoundaries(range) {
   const labelLayer = document.getElementById("day-label-layer");
   const resetLayer = document.getElementById("reset-day-grid");
   const resetLabelLayer = document.getElementById("reset-day-label-layer");
+  const flexibleLayer = document.getElementById("flexible-day-grid");
+  const flexibleLabelLayer = document.getElementById("flexible-day-label-layer");
   clearChildren(layer);
   clearChildren(labelLayer);
   clearChildren(resetLayer);
   clearChildren(resetLabelLayer);
+  clearChildren(flexibleLayer);
+  clearChildren(flexibleLabelLayer);
   const labelInterval = dayLabelIntervalDays(range);
   dayBoundaryTimestamps(range).forEach((timestamp, index) => {
     const x = xPosition(timestamp, range);
@@ -925,6 +1228,15 @@ function renderDayBoundaries(range) {
       y1: usageData.resetTop,
       x2: x.toFixed(2),
       y2: usageData.resetTop + usageData.resetHeight,
+      stroke: "#e2e8f0",
+      "stroke-width": 1,
+      "stroke-dasharray": "4 6"
+    }));
+    flexibleLayer.appendChild(svgElement("line", {
+      x1: x.toFixed(2),
+      y1: usageData.flexibleTop,
+      x2: x.toFixed(2),
+      y2: usageData.flexibleTop + usageData.flexibleHeight,
       stroke: "#e2e8f0",
       "stroke-width": 1,
       "stroke-dasharray": "4 6"
@@ -957,6 +1269,16 @@ function renderDayBoundaries(range) {
       });
       resetLabel.textContent = formatAxisDate(timestamp);
       resetLabelLayer.appendChild(resetLabel);
+      const flexibleLabel = svgElement("text", {
+        x: x.toFixed(2),
+        y: (usageData.flexibleTop + usageData.flexibleHeight + 18).toFixed(2),
+        "text-anchor": anchor,
+        "font-family": "system-ui, -apple-system, sans-serif",
+        "font-size": 11,
+        fill: "#64748b"
+      });
+      flexibleLabel.textContent = formatAxisDate(timestamp);
+      flexibleLabelLayer.appendChild(flexibleLabel);
     }
   });
 }
@@ -970,8 +1292,9 @@ function renderSeries(range) {
   let visiblePointCount = 0;
 
   usageData.series.forEach((series, index) => {
+    const active = activeSeriesIndexes.has(index);
     const visiblePoints = series.points.filter(
-      (point) => point.timestamp >= range.start && point.timestamp <= range.end
+      (point) => active && point.timestamp >= range.start && point.timestamp <= range.end
     );
     visiblePointCount += visiblePoints.length;
     if (visiblePoints.length > 1) {
@@ -1003,7 +1326,7 @@ function renderSeries(range) {
     }
 
     const legendY = usageData.top + 18 + index * 24;
-    const opacity = visiblePoints.length ? 1 : 0.35;
+    const opacity = active ? (visiblePoints.length ? 1 : 0.35) : 0.18;
     legendLayer.appendChild(svgElement("line", {
       x1: usageData.left + usageData.plotWidth + 28,
       y1: legendY - 4,
@@ -1026,6 +1349,9 @@ function renderSeries(range) {
     legendLayer.appendChild(label);
   });
 
+  emptyMessage.textContent = activeSeriesIndexes.size
+    ? "No snapshots in selected window"
+    : "No usage lines selected";
   emptyMessage.setAttribute("display", visiblePointCount ? "none" : "block");
 }
 
@@ -1036,7 +1362,17 @@ function weeklyResetLabel(type) {
   if (type === "hard") {
     return "hard reset";
   }
+  if (type === "early_unknown") {
+    return "early reset (?)";
+  }
   return "natural reset";
+}
+
+function weeklyResetNote(type) {
+  if (type === "early_unknown") {
+    return "manual vs hard unknown because reset-credit data was unavailable";
+  }
+  return "";
 }
 
 function labelBoxOverlaps(a, b) {
@@ -1080,7 +1416,8 @@ function renderWeeklyResets(range) {
     placedLabels.push(box);
 
     const title = svgElement("title");
-    title.textContent = `${label} - ${event.localTime} - max weekly usage before reset ${event.previousWeeklyMaxPercent}% - reset credits ${event.previousResetCredits ?? "unknown"} to ${event.currentResetCredits ?? "unknown"}`;
+    const resetNote = weeklyResetNote(event.type);
+    title.textContent = `${label} - ${event.localTime} - max weekly usage before reset ${event.previousWeeklyMaxPercent}% - reset credits ${event.previousResetCredits ?? "unknown"} to ${event.currentResetCredits ?? "unknown"}${resetNote ? " - " + resetNote : ""}`;
     const text = svgElement("text", {
       class: "weekly-reset-label",
       x: x.toFixed(2),
@@ -1211,6 +1548,128 @@ function renderResetCreditExpirationLabels(layer, range, maxCount) {
   }
 }
 
+function formatBalance(value) {
+  if (!Number.isFinite(value)) {
+    return "unknown";
+  }
+  if (Number.isInteger(value)) {
+    return String(value);
+  }
+  return value.toFixed(2).replace(/\\.?0+$/, "");
+}
+
+function flexiblePointLabel(point) {
+  if (point.unlimited) {
+    return "unlimited";
+  }
+  return point.balanceText || formatBalance(point.balance);
+}
+
+function renderFlexibleCredits(range) {
+  const layer = document.getElementById("flexible-credit-layer");
+  const emptyMessage = document.getElementById("flexible-empty-message");
+  clearChildren(layer);
+
+  const points = flexibleVisiblePoints(range);
+  const maxBalance = Math.max(
+    1,
+    usageData.flexibleCredit.maxBalance,
+    ...points.map((point) => point.balance)
+  );
+  document.getElementById("flexible-max-label").textContent = formatBalance(maxBalance);
+  document.getElementById("flexible-zero-label").textContent = "0";
+  document.getElementById("flexible-current-label").textContent = usageData.flexibleCredit.points.length
+    ? `Current flexible balance: ${flexiblePointLabel(usageData.flexibleCredit.points[usageData.flexibleCredit.points.length - 1])}`
+    : "Current flexible balance: unknown";
+
+  if (!points.length) {
+    emptyMessage.setAttribute("display", "block");
+    return;
+  }
+  emptyMessage.setAttribute("display", "none");
+
+  const lineParts = [
+    `M ${xPosition(points[0].timestamp, range).toFixed(2)} ${flexibleYPosition(points[0].balance, maxBalance).toFixed(2)}`
+  ];
+  for (let index = 1; index < points.length; index += 1) {
+    const point = points[index];
+    lineParts.push(`H ${xPosition(point.timestamp, range).toFixed(2)}`);
+    lineParts.push(`V ${flexibleYPosition(point.balance, maxBalance).toFixed(2)}`);
+  }
+  lineParts.push(`H ${xPosition(range.end, range).toFixed(2)}`);
+  const baselineY = usageData.flexibleTop + usageData.flexibleHeight;
+  const areaParts = [
+    ...lineParts,
+    `V ${baselineY.toFixed(2)}`,
+    `H ${xPosition(points[0].timestamp, range).toFixed(2)}`,
+    "Z"
+  ];
+  layer.appendChild(svgElement("path", {
+    d: areaParts.join(" "),
+    fill: "#ede9fe",
+    opacity: 0.72,
+    stroke: "none"
+  }));
+  layer.appendChild(svgElement("path", {
+    d: lineParts.join(" "),
+    fill: "none",
+    stroke: "#6d28d9",
+    "stroke-width": 2
+  }));
+
+  for (const point of points) {
+    if (point.carriedForward) {
+      continue;
+    }
+    const circle = svgElement("circle", {
+      class: "usage-point",
+      cx: xPosition(point.timestamp, range).toFixed(2),
+      cy: flexibleYPosition(point.balance, maxBalance).toFixed(2),
+      r: 4,
+      fill: "#6d28d9"
+    });
+    const title = svgElement("title");
+    title.textContent = `${point.firstObserved ? "Flexible credit balance first captured in local history" : "Flexible credit balance changed"} - ${point.localTime} - ${flexiblePointLabel(point)}`;
+    circle.appendChild(title);
+    layer.appendChild(circle);
+  }
+}
+
+function epochToLocalInput(timestamp) {
+  const date = new Date(timestamp * 1000);
+  const localTime = new Date(date.getTime() - date.getTimezoneOffset() * 60000);
+  return localTime.toISOString().slice(0, 16);
+}
+
+function localInputToEpoch(value) {
+  const timestamp = Date.parse(value);
+  return Number.isFinite(timestamp) ? Math.floor(timestamp / 1000) : null;
+}
+
+function updateCustomControls(range) {
+  const controls = document.getElementById("custom-range-controls");
+  controls.hidden = currentViewPreset !== "custom";
+  if (currentViewPreset !== "custom") {
+    return;
+  }
+  const activeElement = document.activeElement;
+  if (!activeElement || !activeElement.classList.contains("custom-range-input")) {
+    document.getElementById("custom-start").value = epochToLocalInput(range.start);
+    document.getElementById("custom-end").value = epochToLocalInput(range.end);
+  }
+}
+
+function updateVisibilityControls() {
+  document.getElementById("show-reset-credit").checked = resetGraphVisible;
+  document.getElementById("show-flexible-credit").checked = flexibleGraphVisible;
+  document.documentElement.classList.toggle("hide-reset-graph", !resetGraphVisible);
+  document.documentElement.classList.toggle("hide-flexible-graph", !flexibleGraphVisible);
+  document.querySelectorAll(".series-toggle").forEach((checkbox) => {
+    const index = Number(checkbox.dataset.seriesIndex);
+    checkbox.checked = activeSeriesIndexes.has(index);
+  });
+}
+
 function render() {
   document.getElementById("view-preset").value = currentViewPreset;
   const range = visibleRange();
@@ -1219,12 +1678,12 @@ function render() {
   const panText = interval === null
     ? "All recorded history"
     : `Window ending ${formatDate(range.end)}`;
-  document.querySelectorAll(".range-end").forEach((rangeSlider) => {
-    rangeSlider.min = String(bounds.min);
-    rangeSlider.max = String(bounds.max);
-    rangeSlider.step = "300";
-    rangeSlider.value = String(range.end);
-    rangeSlider.disabled = interval === null || bounds.min === bounds.max;
+  document.querySelectorAll(".history-scroll").forEach((scroller) => {
+    const disabled = interval === null || bounds.min === bounds.max;
+    scroller.dataset.disabled = disabled ? "true" : "false";
+    if (scroller !== activeScroller) {
+      syncScroller(scroller, range.end);
+    }
   });
   document.querySelectorAll(".pan-label").forEach((label) => {
     label.textContent = panText;
@@ -1233,16 +1692,27 @@ function render() {
     window.parent.postMessage({
       type: "codex-meter-view-preset",
       value: currentViewPreset,
-      end: range.end
+      end: range.end,
+      start: range.start,
+      series: Array.from(activeSeriesIndexes).sort((a, b) => a - b),
+      resetGraphVisible,
+      flexibleGraphVisible
     }, "*");
   }
   document.getElementById("start-label").textContent = formatDate(range.start);
   document.getElementById("end-label").textContent = formatDate(range.end);
   document.getElementById("range-label").textContent = `${formatDate(range.start)} to ${formatDate(range.end)}`;
+  updateCustomControls(range);
+  updateVisibilityControls();
   renderDayBoundaries(range);
   renderSeries(range);
   renderWeeklyResets(range);
-  renderResetCredits(range);
+  if (resetGraphVisible) {
+    renderResetCredits(range);
+  }
+  if (flexibleGraphVisible) {
+    renderFlexibleCredits(range);
+  }
 }
 
 const viewPresetSelect = document.getElementById("view-preset");
@@ -1251,10 +1721,75 @@ viewPresetSelect.addEventListener("change", () => {
   currentRangeEnd = usageData.last;
   render();
 });
-document.querySelectorAll(".range-end").forEach((rangeEndInput) => {
-  rangeEndInput.addEventListener("input", () => {
-    currentRangeEnd = clampRangeEnd(Number(rangeEndInput.value));
+document.querySelectorAll(".series-toggle").forEach((checkbox) => {
+  checkbox.addEventListener("change", () => {
+    const index = Number(checkbox.dataset.seriesIndex);
+    if (checkbox.checked) {
+      activeSeriesIndexes.add(index);
+    } else {
+      activeSeriesIndexes.delete(index);
+    }
     render();
+  });
+});
+document.getElementById("show-reset-credit").addEventListener("change", (event) => {
+  resetGraphVisible = event.target.checked;
+  render();
+});
+document.getElementById("show-flexible-credit").addEventListener("change", (event) => {
+  flexibleGraphVisible = event.target.checked;
+  render();
+});
+function applyCustomRangeInputs() {
+  const start = localInputToEpoch(document.getElementById("custom-start").value);
+  const end = localInputToEpoch(document.getElementById("custom-end").value);
+  if (start === null || end === null) {
+    return;
+  }
+  customStart = start;
+  customEnd = end;
+  normalizeCustomRange();
+  currentViewPreset = "custom";
+  currentRangeEnd = customEnd;
+  render();
+}
+document.getElementById("custom-start").addEventListener("change", applyCustomRangeInputs);
+document.getElementById("custom-end").addEventListener("change", applyCustomRangeInputs);
+document.querySelectorAll(".history-scroll").forEach((scroller) => {
+  scroller.addEventListener("pointerdown", () => {
+    activeScroller = scroller;
+  });
+  scroller.addEventListener("pointerup", () => {
+    activeScroller = null;
+    render();
+  });
+  scroller.addEventListener("pointercancel", () => {
+    activeScroller = null;
+    render();
+  });
+  scroller.addEventListener("mouseleave", () => {
+    if (activeScroller === scroller) {
+      activeScroller = null;
+      render();
+    }
+  });
+  scroller.addEventListener("scroll", () => {
+    if (isSyncingScroll) {
+      return;
+    }
+    if (scroller.dataset.disabled === "true") {
+      return;
+    }
+    activeScroller = scroller;
+    window.clearTimeout(scrollIdleTimer);
+    currentRangeEnd = scrollLeftToRangeEnd(scroller);
+    render();
+    scrollIdleTimer = window.setTimeout(() => {
+      if (activeScroller === scroller) {
+        activeScroller = null;
+        render();
+      }
+    }, 160);
   });
 });
 render();
@@ -1270,28 +1805,50 @@ render();
         ".usage-point{cursor:crosshair}.usage-point:hover{stroke:#0f172a;stroke-width:2}"
         ".weekly-reset-label{cursor:help}.weekly-reset-label:hover{fill:#0f172a}"
         ".reset-expiration-label{cursor:help}.reset-expiration-label:hover{fill:#0f172a}"
-        ".usage-control-row{display:flex;align-items:center;gap:8px;"
+        ".control-panel{display:flex;flex-direction:column;gap:7px;"
         "font-family:system-ui,-apple-system,sans-serif;font-size:13px;color:#334155}"
-        ".usage-control-row label{display:flex;align-items:center;gap:5px}"
-        ".usage-control-row select{height:28px;"
+        ".usage-control-row,.series-control-row{display:flex;align-items:center;gap:10px;flex-wrap:wrap}"
+        ".usage-control-row label,.series-choice{display:flex;align-items:center;gap:5px}"
+        ".usage-control-row select,.usage-control-row input[type=datetime-local]{height:28px;"
         "box-sizing:border-box;border:1px solid #cbd5e1;border-radius:4px;"
         "background:#fff;color:#0f172a;padding:3px 6px;font:inherit}"
+        ".custom-range-controls{display:flex;align-items:center;gap:8px}"
+        ".custom-range-controls[hidden]{display:none}"
+        ".series-choice{font-size:12px;color:#334155}"
+        ".series-choice span{width:14px;height:0;border-top:3px solid;display:inline-block}"
+        ".supplement-toggle{font-size:12px;color:#334155}"
         ".usage-pan-row{display:flex;align-items:center;gap:10px;"
         "font-family:system-ui,-apple-system,sans-serif;font-size:12px;color:#334155}"
-        ".usage-pan-row input[type=range]{flex:1;min-width:0}"
-        ".usage-pan-row input[type=range]:disabled{opacity:.45}"
+        ".usage-pan-row span{white-space:nowrap}"
+        ".usage-pan-row span:first-child{flex:0 0 118px}"
+        ".usage-pan-row .pan-label{flex:0 0 238px;text-align:right}"
+        ".history-scroll{flex:1;min-width:0;height:16px;overflow-x:auto;overflow-y:hidden;"
+        "scrollbar-gutter:stable;background:transparent}"
+        ".history-scroll[data-disabled=true]{opacity:.45;pointer-events:none}"
+        ".history-scroll-fill{height:1px}"
+        ".hide-reset-graph .reset-graph-section{display:none}"
+        ".hide-flexible-graph .flexible-graph-section{display:none}"
         "</style>",
         '<text x="32" y="34" font-family="system-ui, -apple-system, sans-serif" '
         'font-size="22" font-weight="700" fill="#0f172a">Codex usage limits</text>',
         '<text x="32" y="58" font-family="system-ui, -apple-system, sans-serif" '
         f'font-size="13" fill="#475569">{html.escape(header_status)}</text>',
-        '<foreignObject x="32" y="72" width="760" height="42">',
-        '<div xmlns="http://www.w3.org/1999/xhtml" class="usage-control-row">',
+        '<foreignObject x="32" y="72" width="980" height="84">',
+        '<div xmlns="http://www.w3.org/1999/xhtml" class="control-panel">',
+        '<div class="usage-control-row">',
         '<label>View '
-        f'<select id="view-preset">{view_preset_options}</select></label>',
+        f'<select id="view-preset">{view_preset_options}</select></label>'
+        '<div id="custom-range-controls" class="custom-range-controls" hidden="hidden">'
+        '<label>Start <input id="custom-start" class="custom-range-input" type="datetime-local"/></label>'
+        '<label>End <input id="custom-end" class="custom-range-input" type="datetime-local"/></label>'
+        '</div>'
+        '<label class="supplement-toggle"><input id="show-reset-credit" type="checkbox" checked="checked"/> Reset-credit graph</label>'
+        '<label class="supplement-toggle"><input id="show-flexible-credit" type="checkbox" checked="checked"/> Flexible-credit graph</label>',
+        "</div>",
+        f'<div class="series-control-row">{series_controls}</div>',
         "</div>",
         "</foreignObject>",
-        '<text id="range-label" x="32" y="119" '
+        '<text id="range-label" x="32" y="158" '
         'font-family="system-ui, -apple-system, sans-serif" '
         'font-size="12" fill="#475569"></text>',
         f'<rect x="{left}" y="{top}" width="{plot_width}" height="{plot_height}" '
@@ -1320,7 +1877,7 @@ render();
     parts.append(
         '<div xmlns="http://www.w3.org/1999/xhtml" class="usage-pan-row">'
         '<span>Browse usage</span>'
-        '<input class="range-end" type="range"/>'
+        '<div class="history-scroll"><div class="history-scroll-fill"></div></div>'
         '<span class="pan-label"></span>'
         '</div>'
     )
@@ -1354,14 +1911,14 @@ render();
     )
     expiry_y = reset_top
     parts.append(
-        f'<text x="{expiry_x}" y="{expiry_y}" '
+        f'<text class="reset-graph-section" x="{expiry_x}" y="{expiry_y}" '
         'font-family="system-ui, -apple-system, sans-serif" '
         'font-size="12" font-weight="700" fill="#0f172a">'
         "Reset credit expirations</text>"
     )
     if reset_credit_expiration_rows:
         parts.append(
-            f'<text x="{expiry_x}" y="{expiry_y + 18}" '
+            f'<text class="reset-graph-section" x="{expiry_x}" y="{expiry_y + 18}" '
             'font-family="system-ui, -apple-system, sans-serif" '
             'font-size="10" fill="#64748b">Current estimate based on 30-day expiration</text>'
         )
@@ -1371,37 +1928,37 @@ render();
             added_at = html.escape(str(row["addedAtText"]))
             uncertainty = " (uncertain date)" if row["uncertain"] else ""
             parts.append(
-                f'<text x="{expiry_x}" y="{row_y}" '
+                f'<text class="reset-graph-section" x="{expiry_x}" y="{row_y}" '
                 'font-family="system-ui, -apple-system, sans-serif" '
                 'font-size="11" fill="#334155">'
                 f'#{row["position"]}: expires {expires_at}{uncertainty}</text>'
             )
             parts.append(
-                f'<text x="{expiry_x}" y="{row_y + 13}" '
+                f'<text class="reset-graph-section" x="{expiry_x}" y="{row_y + 13}" '
                 'font-family="system-ui, -apple-system, sans-serif" '
                 'font-size="10" fill="#64748b">'
                 f'added: {added_at}</text>'
             )
     else:
         parts.append(
-            f'<text x="{expiry_x}" y="{expiry_y + 18}" '
+            f'<text class="reset-graph-section" x="{expiry_x}" y="{expiry_y + 18}" '
             'font-family="system-ui, -apple-system, sans-serif" '
             'font-size="11" fill="#64748b">No available reset credits</text>'
         )
     parts.append(
-        f'<text x="{left}" y="{reset_top - 16}" '
+        f'<text class="reset-graph-section" x="{left}" y="{reset_top - 16}" '
         'font-family="system-ui, -apple-system, sans-serif" '
         'font-size="13" font-weight="600" fill="#0f172a">'
         "Reset credits available</text>"
     )
     parts.append(
-        f'<text id="reset-current-label" x="{left + plot_width}" '
+        f'<text class="reset-graph-section" id="reset-current-label" x="{left + plot_width}" '
         f'y="{reset_top - 16}" text-anchor="end" '
         'font-family="system-ui, -apple-system, sans-serif" '
         'font-size="12" fill="#475569"></text>'
     )
     parts.append(
-        f'<rect x="{left}" y="{reset_top}" width="{plot_width}" '
+        f'<rect class="reset-graph-section" x="{left}" y="{reset_top}" width="{plot_width}" '
         f'height="{reset_height}" fill="#ffffff" stroke="#cbd5e1"/>'
     )
     for count_label, y in (
@@ -1409,18 +1966,74 @@ render();
         ("reset-zero-label", reset_top + reset_height + 4),
     ):
         parts.append(
-            f'<text id="{count_label}" x="{left - 12}" y="{y:.2f}" '
+            f'<text class="reset-graph-section" id="{count_label}" x="{left - 12}" y="{y:.2f}" '
             'text-anchor="end" font-family="system-ui, -apple-system, sans-serif" '
             'font-size="12" fill="#475569"></text>'
         )
     parts.append(
-        f'<line x1="{left}" y1="{reset_top + reset_height:.2f}" '
+        f'<line class="reset-graph-section" x1="{left}" y1="{reset_top + reset_height:.2f}" '
         f'x2="{left + plot_width}" y2="{reset_top + reset_height:.2f}" '
         'stroke="#e2e8f0"/>'
     )
-    parts.append('<g id="reset-day-grid"></g>')
-    parts.append('<g id="reset-day-label-layer"></g>')
+    parts.append('<g class="reset-graph-section" id="reset-day-grid"></g>')
+    parts.append('<g class="reset-graph-section" id="reset-day-label-layer"></g>')
 
+    parts.append(
+        f'<foreignObject class="reset-graph-section" x="{left}" y="{reset_top + reset_height + 30}" '
+        f'width="{plot_width}" height="28">'
+    )
+    parts.append(
+        '<div xmlns="http://www.w3.org/1999/xhtml" class="usage-pan-row">'
+        '<span>Browse reset credits</span>'
+        '<div class="history-scroll"><div class="history-scroll-fill"></div></div>'
+        '<span class="pan-label"></span>'
+        '</div>'
+    )
+    parts.append("</foreignObject>")
+    parts.append(
+        f'<text class="flexible-graph-section" x="{left}" y="{flexible_top - 16}" '
+        'font-family="system-ui, -apple-system, sans-serif" '
+        'font-size="13" font-weight="600" fill="#0f172a">'
+        "Flexible credit balance</text>"
+    )
+    parts.append(
+        f'<text class="flexible-graph-section" id="flexible-current-label" x="{left + plot_width}" '
+        f'y="{flexible_top - 16}" text-anchor="end" '
+        'font-family="system-ui, -apple-system, sans-serif" '
+        'font-size="12" fill="#475569"></text>'
+    )
+    parts.append(
+        f'<rect class="flexible-graph-section" x="{left}" y="{flexible_top}" width="{plot_width}" '
+        f'height="{flexible_height}" fill="#ffffff" stroke="#cbd5e1"/>'
+    )
+    for balance_label, y in (
+        ("flexible-max-label", flexible_top + 4),
+        ("flexible-zero-label", flexible_top + flexible_height + 4),
+    ):
+        parts.append(
+            f'<text class="flexible-graph-section" id="{balance_label}" x="{left - 12}" y="{y:.2f}" '
+            'text-anchor="end" font-family="system-ui, -apple-system, sans-serif" '
+            'font-size="12" fill="#475569"></text>'
+        )
+    parts.append(
+        f'<line class="flexible-graph-section" x1="{left}" y1="{flexible_top + flexible_height:.2f}" '
+        f'x2="{left + plot_width}" y2="{flexible_top + flexible_height:.2f}" '
+        'stroke="#e2e8f0"/>'
+    )
+    parts.append('<g class="flexible-graph-section" id="flexible-day-grid"></g>')
+    parts.append('<g class="flexible-graph-section" id="flexible-day-label-layer"></g>')
+    parts.append(
+        f'<foreignObject class="flexible-graph-section" x="{left}" y="{flexible_top + flexible_height + 30}" '
+        f'width="{plot_width}" height="28">'
+    )
+    parts.append(
+        '<div xmlns="http://www.w3.org/1999/xhtml" class="usage-pan-row">'
+        '<span>Browse flexible credits</span>'
+        '<div class="history-scroll"><div class="history-scroll-fill"></div></div>'
+        '<span class="pan-label"></span>'
+        '</div>'
+    )
+    parts.append("</foreignObject>")
     parts.append(
         f'<text id="start-label" x="{left}" y="{height - 36}" '
         'font-family="system-ui, -apple-system, sans-serif" '
@@ -1432,18 +2045,6 @@ render();
         'font-size="12" fill="#475569"></text>'
     )
     parts.append(
-        f'<foreignObject x="{left}" y="{reset_top + reset_height + 30}" '
-        f'width="{plot_width}" height="28">'
-    )
-    parts.append(
-        '<div xmlns="http://www.w3.org/1999/xhtml" class="usage-pan-row">'
-        '<span>Browse reset credits</span>'
-        '<input class="range-end" type="range"/>'
-        '<span class="pan-label"></span>'
-        '</div>'
-    )
-    parts.append("</foreignObject>")
-    parts.append(
         f'<text id="empty-message" x="{left + plot_width / 2:.2f}" '
         f'y="{top + plot_height / 2:.2f}" text-anchor="middle" '
         'font-family="system-ui, -apple-system, sans-serif" '
@@ -1451,14 +2052,22 @@ render();
         "No snapshots in selected window</text>"
     )
     parts.append(
-        f'<text id="reset-empty-message" x="{left + plot_width / 2:.2f}" '
+        f'<text class="reset-graph-section" id="reset-empty-message" x="{left + plot_width / 2:.2f}" '
         f'y="{reset_top + reset_height / 2:.2f}" text-anchor="middle" '
         'font-family="system-ui, -apple-system, sans-serif" '
         'font-size="12" fill="#64748b" display="none">'
         "No reset-credit history in selected window</text>"
     )
+    parts.append(
+        f'<text class="flexible-graph-section" id="flexible-empty-message" x="{left + plot_width / 2:.2f}" '
+        f'y="{flexible_top + flexible_height / 2:.2f}" text-anchor="middle" '
+        'font-family="system-ui, -apple-system, sans-serif" '
+        'font-size="12" fill="#64748b" display="none">'
+        "No flexible-credit balance history in selected window</text>"
+    )
     parts.append('<g id="series-layer"></g>')
-    parts.append('<g id="reset-credit-layer"></g>')
+    parts.append('<g class="reset-graph-section" id="reset-credit-layer"></g>')
+    parts.append('<g class="flexible-graph-section" id="flexible-credit-layer"></g>')
     parts.append('<g id="legend-layer"></g>')
 
     parts.append(cdata_script(script))
@@ -1512,7 +2121,11 @@ def render_html() -> None:
     const graphFrame = document.getElementById("graph-frame");
     const status = document.getElementById("status");
     let selectedViewPreset = null;
+    let selectedRangeStart = null;
     let selectedRangeEnd = null;
+    let selectedSeries = null;
+    let selectedResetGraphVisible = null;
+    let selectedFlexibleGraphVisible = null;
 
     window.addEventListener("message", (event) => {{
       const data = event.data;
@@ -1522,7 +2135,17 @@ def render_html() -> None:
         && validViewPresets.has(data.value)
       ) {{
         selectedViewPreset = data.value;
+        selectedRangeStart = Number.isFinite(data.start) ? data.start : selectedRangeStart;
         selectedRangeEnd = Number.isFinite(data.end) ? data.end : selectedRangeEnd;
+        selectedSeries = Array.isArray(data.series) ? data.series : selectedSeries;
+        selectedResetGraphVisible =
+          typeof data.resetGraphVisible === "boolean"
+            ? data.resetGraphVisible
+            : selectedResetGraphVisible;
+        selectedFlexibleGraphVisible =
+          typeof data.flexibleGraphVisible === "boolean"
+            ? data.flexibleGraphVisible
+            : selectedFlexibleGraphVisible;
       }}
     }});
 
@@ -1532,8 +2155,20 @@ def render_html() -> None:
       if (selectedViewPreset !== null) {{
         params.set("view", selectedViewPreset);
       }}
+      if (selectedRangeStart !== null) {{
+        params.set("start", String(selectedRangeStart));
+      }}
       if (selectedRangeEnd !== null) {{
         params.set("end", String(selectedRangeEnd));
+      }}
+      if (selectedSeries !== null) {{
+        params.set("series", selectedSeries.join(","));
+      }}
+      if (selectedResetGraphVisible === false) {{
+        params.set("resetGraph", "0");
+      }}
+      if (selectedFlexibleGraphVisible === false) {{
+        params.set("flexibleGraph", "0");
       }}
       return `usage.svg?${{params.toString()}}`;
     }}
@@ -1563,6 +2198,11 @@ def summary_lines(result: dict[str, Any]) -> list[str]:
         available_count = reset_credits.get("availableCount")
         if isinstance(available_count, int):
             lines.append(f"Reset credits available: {available_count}")
+    flexible_state = flexible_credit_state({"result": result})
+    if flexible_state is not None:
+        lines.append(
+            f"Flexible credit balance: {flexible_state['balanceText']}"
+        )
     for limit_id, limit_snapshot in sorted(limit_snapshots(result).items()):
         limit_name = display_limit_name(limit_id, limit_snapshot)
         for window_name in ("primary", "secondary"):
@@ -1584,6 +2224,7 @@ def main() -> None:
     snapshot = snapshot_limits(result)
     append_snapshot(snapshot)
     alert_if_reset_credit_count_changed(previous_snapshot, snapshot)
+    record_if_flexible_credit_changed(previous_snapshot, snapshot)
     render_svg(load_snapshots())
     render_html()
 
