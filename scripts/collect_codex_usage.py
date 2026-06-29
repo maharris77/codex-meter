@@ -991,7 +991,7 @@ function renderResetCreditExpirationLabels(layer, range, maxCount) {
         resetYPosition(creditLevel, maxCount) + 11
       );
       const title = svgElement("title");
-      title.textContent = `${lot.expiresLabel} - added ${lot.addedAtText} - ${lot.uncertain ? "uncertain date" : "current estimate based on 30-day expiration"}`;
+      title.textContent = `${lot.expiresLabel} - added ${lot.addedAtText} - ${lot.uncertain ? "uncertain date" : "Current estimate based on 30-day expiration"}`;
       const text = svgElement("text", {
         class: "reset-expiration-label",
         x: labelX.toFixed(2),
