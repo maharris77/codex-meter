@@ -72,11 +72,21 @@ shown in a separate lower graph and is not a reset-credit count. The view
 dropdown and browse controls only change what the graph displays; the sampling
 interval is set by the LaunchAgent installer.
 Weekly usage-limit resets are labeled on the main graph as natural, manual,
-hard, or uncertain early resets. Natural resets are resets observed at the
-scheduled weekly reset time, manual resets are early resets with a reset-credit
-decrease, hard resets are early usage resets when reset-credit data is present
-and did not decrease, and `early reset (?)` means the reset happened early but
-reset-credit data was unavailable, so manual versus hard cannot be determined.
+hard, inferred, or uncertain early resets. Natural resets are resets observed at
+the scheduled weekly reset time, manual resets are early resets with a
+reset-credit decrease, and hard resets are early usage resets when reset-credit
+data is present and did not decrease. Codex Meter treats reset-credit banking as
+available starting with Codex app `26.609` on `2026-06-11`, based on the
+[Codex changelog](https://developers.openai.com/codex/changelog): ambiguous
+early resets before that date are labeled `hard reset (pre-credits)`, while
+ambiguous early Codex resets after that date and before the first observed
+post-banking hard reset in local history are labeled `manual reset (?)`.
+`early reset (?)` means the reset happened early but reset-credit data was
+unavailable and the era rule cannot distinguish manual from hard.
+The reset-credit section also shows an estimated reset-credit-use count with an
+observed/inferred split. This estimate counts observed manual resets plus
+post-`2026-06-11` inferred manual resets; it does not count natural resets or
+pre-credit hard resets.
 Usage series use colorblind-friendlier colors and distinct line styles so color
 is not the only cue. The right side of the graph shows Codex's next natural
 5-hour and weekly reset times. If the weekly reset is due before the 5-hour

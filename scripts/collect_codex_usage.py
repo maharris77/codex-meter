@@ -28,6 +28,10 @@ CODEX_BIN = "/opt/homebrew/bin/codex"
 PROJECT_VERSION = "0.5.0"
 RESET_TIME_TOLERANCE_SECONDS = 10 * 60
 RESET_CREDIT_EXPIRATION_DAYS = 30
+RESET_CREDIT_BANKING_INTRO_EPOCH = int(
+    datetime(2026, 6, 11, tzinfo=timezone.utc).timestamp()
+)
+RESET_CREDIT_BANKING_INTRO_LABEL = "2026-06-11"
 HTML_REFRESH_SECONDS = 30
 DEFAULT_VIEW_PRESET = "seven_days"
 VIEW_PRESETS = (
@@ -650,10 +654,55 @@ def classify_weekly_reset(
     return None
 
 
+def choose_weekly_reset_type(reset_types: list[str]) -> str:
+    if "manual" in reset_types:
+        return "manual"
+    if "hard" in reset_types:
+        return "hard"
+    if "early_unknown" in reset_types:
+        return "early_unknown"
+    return "natural"
+
+
+def classify_missing_credit_era(
+    reset_type: str,
+    timestamp: int,
+    observed_post_banking_hard_reset: bool,
+) -> str:
+    if reset_type != "early_unknown":
+        return reset_type
+    if timestamp < RESET_CREDIT_BANKING_INTRO_EPOCH:
+        return "inferred_hard"
+    if not observed_post_banking_hard_reset:
+        return "inferred_manual"
+    return reset_type
+
+
+def reset_type_source(reset_type: str) -> str:
+    if reset_type.startswith("inferred_"):
+        return "inferred"
+    if reset_type == "early_unknown":
+        return "uncertain"
+    return "observed"
+
+
+def reset_credit_use_estimate(events: list[dict[str, Any]]) -> dict[str, int]:
+    observed_manual = sum(1 for event in events if event["type"] == "manual")
+    inferred_manual = sum(
+        1 for event in events if event["type"] == "inferred_manual"
+    )
+    return {
+        "observedManual": observed_manual,
+        "inferredManual": inferred_manual,
+        "estimatedTotal": observed_manual + inferred_manual,
+    }
+
+
 def collect_weekly_reset_events(
     snapshots: list[dict[str, Any]],
 ) -> list[dict[str, Any]]:
     events: list[dict[str, Any]] = []
+    observed_post_banking_hard_reset = False
     for previous_snapshot, current_snapshot in zip(snapshots, snapshots[1:]):
         previous_limits = limit_snapshots(previous_snapshot["result"])
         current_limits = limit_snapshots(current_snapshot["result"])
@@ -692,24 +741,26 @@ def collect_weekly_reset_events(
             if known_previous_weekly_values
             else 0
         )
-        if "manual" in reset_types:
-            reset_type = "manual"
-        elif "hard" in reset_types:
-            reset_type = "hard"
-        elif "early_unknown" in reset_types:
-            reset_type = "early_unknown"
-        else:
-            reset_type = "natural"
+        reset_type = classify_missing_credit_era(
+            choose_weekly_reset_type(reset_types),
+            timestamp,
+            observed_post_banking_hard_reset,
+        )
         events.append(
             {
                 "timestamp": timestamp,
                 "localTime": format_epoch_local(timestamp),
                 "type": reset_type,
+                "source": reset_type_source(reset_type),
+                "estimatedResetCreditUsed": reset_type
+                in ("manual", "inferred_manual"),
                 "previousWeeklyMaxPercent": previous_weekly_max,
                 "previousResetCredits": previous_count,
                 "currentResetCredits": current_count,
             }
         )
+        if timestamp >= RESET_CREDIT_BANKING_INTRO_EPOCH and reset_type == "hard":
+            observed_post_banking_hard_reset = True
     return events
 
 
@@ -837,6 +888,7 @@ def render_svg(snapshots: list[dict[str, Any]]) -> None:
     )
     natural_reset_summary = codex_natural_reset_summary(snapshots[-1])
     weekly_reset_events = collect_weekly_reset_events(snapshots)
+    reset_credit_estimate = reset_credit_use_estimate(weekly_reset_events)
     reset_credit_max_count = max(
         [1] + [int(point["count"]) for point in reset_credit_points]
     )
@@ -886,6 +938,8 @@ def render_svg(snapshots: list[dict[str, Any]]) -> None:
                 "points": flexible_credit_points,
             },
             "weeklyResets": weekly_reset_events,
+            "resetCreditEstimate": reset_credit_estimate,
+            "resetCreditBankingIntro": RESET_CREDIT_BANKING_INTRO_LABEL,
             "series": series_data,
         },
         separators=(",", ":"),
@@ -1362,6 +1416,12 @@ function weeklyResetLabel(type) {
   if (type === "hard") {
     return "hard reset";
   }
+  if (type === "inferred_manual") {
+    return "manual reset (?)";
+  }
+  if (type === "inferred_hard") {
+    return "hard reset (pre-credits)";
+  }
   if (type === "early_unknown") {
     return "early reset (?)";
   }
@@ -1371,6 +1431,12 @@ function weeklyResetLabel(type) {
 function weeklyResetNote(type) {
   if (type === "early_unknown") {
     return "manual vs hard unknown because reset-credit data was unavailable";
+  }
+  if (type === "inferred_manual") {
+    return `inferred reset-credit use because this early reset occurred after reset banking appeared on ${usageData.resetCreditBankingIntro} and before the first observed post-banking hard reset in local history`;
+  }
+  if (type === "inferred_hard") {
+    return `inferred hard reset because reset-credit banking was not available before ${usageData.resetCreditBankingIntro}`;
   }
   return "";
 }
@@ -1417,7 +1483,7 @@ function renderWeeklyResets(range) {
 
     const title = svgElement("title");
     const resetNote = weeklyResetNote(event.type);
-    title.textContent = `${label} - ${event.localTime} - max weekly usage before reset ${event.previousWeeklyMaxPercent}% - reset credits ${event.previousResetCredits ?? "unknown"} to ${event.currentResetCredits ?? "unknown"}${resetNote ? " - " + resetNote : ""}`;
+    title.textContent = `${label} - ${event.localTime} - ${event.source} classification - max weekly usage before reset ${event.previousWeeklyMaxPercent}% - reset credits ${event.previousResetCredits ?? "unknown"} to ${event.currentResetCredits ?? "unknown"}${event.estimatedResetCreditUsed ? " - counts toward estimated reset-credit use" : ""}${resetNote ? " - " + resetNote : ""}`;
     const text = svgElement("text", {
       class: "weekly-reset-label",
       x: x.toFixed(2),
@@ -1945,6 +2011,27 @@ render();
             'font-family="system-ui, -apple-system, sans-serif" '
             'font-size="11" fill="#64748b">No available reset credits</text>'
         )
+    estimate_y = expiry_y + 52 + max(1, len(reset_credit_expiration_rows)) * 28
+    parts.append(
+        f'<text class="reset-graph-section" x="{expiry_x}" y="{estimate_y}" '
+        'font-family="system-ui, -apple-system, sans-serif" '
+        'font-size="12" font-weight="700" fill="#0f172a">'
+        "Estimated reset-credit use</text>"
+    )
+    parts.append(
+        f'<text class="reset-graph-section" x="{expiry_x}" y="{estimate_y + 18}" '
+        'font-family="system-ui, -apple-system, sans-serif" '
+        'font-size="11" fill="#334155">'
+        f'Total: {reset_credit_estimate["estimatedTotal"]} '
+        f'({reset_credit_estimate["observedManual"]} observed, '
+        f'{reset_credit_estimate["inferredManual"]} inferred)</text>'
+    )
+    parts.append(
+        f'<text class="reset-graph-section" x="{expiry_x}" y="{estimate_y + 33}" '
+        'font-family="system-ui, -apple-system, sans-serif" '
+        'font-size="10" fill="#64748b">'
+        f'Inference uses reset banking from {RESET_CREDIT_BANKING_INTRO_LABEL}</text>'
+    )
     parts.append(
         f'<text class="reset-graph-section" x="{left}" y="{reset_top - 16}" '
         'font-family="system-ui, -apple-system, sans-serif" '
