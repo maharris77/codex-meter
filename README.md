@@ -21,6 +21,7 @@ The collector starts the local Codex app-server, calls
 - `~/Documents/Archives/Codex Meter/snapshots.jsonl`
 - `~/Documents/Archives/Codex Meter/latest.json`
 - `~/Documents/Archives/Codex Meter/usage.svg`
+- `~/Documents/Archives/Codex Meter/settings.json`
 
 When the app-server response includes reset credits, the collector also watches
 `rateLimitResetCredits.availableCount`. If that count changes from the previous
@@ -28,23 +29,28 @@ snapshot, Codex Meter appends an event to
 `~/Documents/Archives/Codex Meter/reset_credit_events.jsonl` and sends a macOS
 notification.
 
-The SVG graph defaults to the past 7 days and includes view options for common
-time windows. When reset-credit data is available, the graph header shows the
-current count and the lower strip shows the first count captured in local
-history plus later count changes over the selected time range. The view
-dropdown only changes what the graph displays; the sampling interval is set by
-the LaunchAgent installer. Weekly usage-limit resets are labeled on the main
-graph as natural, manual, or hard resets. Natural resets are resets observed at
-the scheduled weekly reset time, manual resets are early resets with a reset
-credit decrease, and hard resets are early usage resets without a reset-credit
-decrease. Usage series use colorblind-friendlier colors and distinct line
-styles so color is not the only cue. The graph also shows a current estimate
-based on Codex's 30-day reset-credit expiration rule. Expiration labels are
-drawn inside the reset-credit strip just left of each visible credit-count
-change and the present edge, with older credits above newer credits. A separate
-table shows the current available-credit expiration estimate. Credits already
-present when local tracking first observed
-reset-credit data are labeled with uncertain expiration dates.
+The SVG graph defaults to the past 7 days unless the local settings file
+chooses another default view. Set `defaultViewPreset` in
+`~/Documents/Archives/Codex Meter/settings.json` to one of `five_hours`,
+`one_day`, `seven_days`, `thirty_days`, or `all`. The repo default remains
+`seven_days`; missing or invalid settings fall back to that default. The
+interactive SVG also remembers dropdown changes in browser storage. When
+reset-credit data is available, the graph header shows the current count and
+the lower strip shows the first count captured in local history plus later
+count changes over the selected time range. The view dropdown only changes what
+the graph displays; the sampling interval is set by the LaunchAgent installer.
+Weekly usage-limit resets are labeled on the main graph as natural, manual, or
+hard resets. Natural resets are resets observed at the scheduled weekly reset
+time, manual resets are early resets with a reset credit decrease, and hard
+resets are early usage resets without a reset-credit decrease. Usage series use
+colorblind-friendlier colors and distinct line styles so color is not the only
+cue. The graph also shows a current estimate based on Codex's 30-day
+reset-credit expiration rule. Expiration labels are drawn inside the
+reset-credit strip just left of each visible credit-count change and the present
+edge, with older credits above newer credits. A separate table shows the
+current available-credit expiration estimate. Credits already present when local
+tracking first observed reset-credit data are labeled with uncertain expiration
+dates.
 
 ## Scope
 

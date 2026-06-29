@@ -20,11 +20,21 @@ SNAPSHOTS_PATH = OUTPUT_DIR / "snapshots.jsonl"
 LATEST_PATH = OUTPUT_DIR / "latest.json"
 SVG_PATH = OUTPUT_DIR / "usage.svg"
 RESET_CREDIT_EVENTS_PATH = OUTPUT_DIR / "reset_credit_events.jsonl"
+SETTINGS_PATH = OUTPUT_DIR / "settings.json"
 READ_TIMEOUT_SECONDS = 30
 CODEX_BIN = "/opt/homebrew/bin/codex"
-PROJECT_VERSION = "0.2.11"
+PROJECT_VERSION = "0.2.12"
 RESET_TIME_TOLERANCE_SECONDS = 10 * 60
 RESET_CREDIT_EXPIRATION_DAYS = 30
+DEFAULT_VIEW_PRESET = "seven_days"
+VIEW_PRESETS = ("five_hours", "one_day", "seven_days", "thirty_days", "all")
+VIEW_PRESET_LABELS = {
+    "five_hours": "Last 5 hours",
+    "one_day": "Last 24 hours",
+    "seven_days": "Last 7 days",
+    "thirty_days": "Last 30 days",
+    "all": "All data",
+}
 WINDOW_LABELS_BY_DURATION_MINS = {
     300: "5-hour window",
     10080: "7-day window",
@@ -175,6 +185,25 @@ def append_snapshot(snapshot: dict[str, Any]) -> None:
         handle.write(json.dumps(snapshot, separators=(",", ":"), sort_keys=True))
         handle.write("\n")
     LATEST_PATH.write_text(json.dumps(snapshot, indent=2, sort_keys=True), "utf-8")
+
+
+def load_settings() -> dict[str, Any]:
+    if not SETTINGS_PATH.exists():
+        return {}
+    try:
+        settings = json.loads(SETTINGS_PATH.read_text("utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return {}
+    if not isinstance(settings, dict):
+        return {}
+    return settings
+
+
+def load_default_view_preset() -> str:
+    default_view_preset = load_settings().get("defaultViewPreset")
+    if isinstance(default_view_preset, str) and default_view_preset in VIEW_PRESETS:
+        return default_view_preset
+    return DEFAULT_VIEW_PRESET
 
 
 def load_latest_snapshot() -> dict[str, Any] | None:
@@ -606,10 +635,21 @@ def render_svg(snapshots: list[dict[str, Any]]) -> None:
     reset_credit_max_count = max(
         [1] + [int(point["count"]) for point in reset_credit_points]
     )
+    selected_view_preset = load_default_view_preset()
+
+    def view_preset_option(value: str) -> str:
+        selected = ' selected="selected"' if value == selected_view_preset else ""
+        label = html.escape(VIEW_PRESET_LABELS[value])
+        return f'<option value="{value}"{selected}>{label}</option>'
+
+    view_preset_options = "".join(
+        view_preset_option(value) for value in VIEW_PRESETS
+    )
     data_json = json.dumps(
         {
             "first": first,
             "last": last,
+            "defaultViewPreset": selected_view_preset,
             "left": left,
             "top": top,
             "plotWidth": plot_width,
@@ -630,6 +670,7 @@ def render_svg(snapshots: list[dict[str, Any]]) -> None:
     script = """
 const usageData = __USAGE_DATA__;
 const svgNS = "http://www.w3.org/2000/svg";
+const viewStorageKey = "codex-meter:view-preset";
 const presetSeconds = {
   five_hours: 5 * 60 * 60,
   one_day: 24 * 60 * 60,
@@ -666,6 +707,34 @@ function formatDate(timestamp) {
 
 function formatPercent(value) {
   return Number.isInteger(value) ? `${value}%` : `${value.toFixed(1)}%`;
+}
+
+function hasViewPreset(value) {
+  return value === "all" || Object.prototype.hasOwnProperty.call(presetSeconds, value);
+}
+
+function storedViewPreset() {
+  try {
+    const value = window.localStorage.getItem(viewStorageKey);
+    return hasViewPreset(value) ? value : null;
+  } catch {
+    return null;
+  }
+}
+
+function initialViewPreset() {
+  const stored = storedViewPreset();
+  if (stored !== null) {
+    return stored;
+  }
+  return hasViewPreset(usageData.defaultViewPreset) ? usageData.defaultViewPreset : "seven_days";
+}
+
+function saveViewPreset(value) {
+  try {
+    window.localStorage.setItem(viewStorageKey, value);
+  } catch {
+  }
 }
 
 function selectedIntervalSeconds() {
@@ -1023,7 +1092,12 @@ function render() {
   renderResetCredits(range);
 }
 
-document.getElementById("view-preset").addEventListener("change", render);
+const viewPresetSelect = document.getElementById("view-preset");
+viewPresetSelect.value = initialViewPreset();
+viewPresetSelect.addEventListener("change", () => {
+  saveViewPreset(viewPresetSelect.value);
+  render();
+});
 render();
 """.replace("__USAGE_DATA__", data_json)
 
@@ -1051,13 +1125,7 @@ render();
         '<foreignObject x="32" y="72" width="760" height="42">',
         '<div xmlns="http://www.w3.org/1999/xhtml" class="usage-control-row">',
         '<label>View '
-        '<select id="view-preset">'
-        '<option value="five_hours">Last 5 hours</option>'
-        '<option value="one_day">Last 24 hours</option>'
-        '<option value="seven_days" selected="selected">Last 7 days</option>'
-        '<option value="thirty_days">Last 30 days</option>'
-        '<option value="all">All data</option>'
-        "</select></label>",
+        f'<select id="view-preset">{view_preset_options}</select></label>',
         "</div>",
         "</foreignObject>",
         '<text id="range-label" x="32" y="119" '
