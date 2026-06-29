@@ -812,9 +812,10 @@ def cdata_script(script: str) -> str:
 
 
 def render_svg(snapshots: list[dict[str, Any]]) -> None:
-    width = 1240
+    width = 1600
+    min_width = 1240
     height = 980
-    left = 78
+    left = 64
     right = 360
     top = 168
     plot_width = width - left - right
@@ -918,8 +919,12 @@ def render_svg(snapshots: list[dict[str, Any]]) -> None:
         {
             "first": first,
             "last": last,
+            "width": width,
+            "minWidth": min_width,
+            "height": height,
             "defaultViewPreset": selected_view_preset,
             "left": left,
+            "right": right,
             "top": top,
             "plotWidth": plot_width,
             "plotHeight": plot_height,
@@ -948,6 +953,8 @@ def render_svg(snapshots: list[dict[str, Any]]) -> None:
 const usageData = __USAGE_DATA__;
 const svgNS = "http://www.w3.org/2000/svg";
 const queryParams = new URLSearchParams(window.location.search);
+const svgRoot = document.getElementById("codex-meter-svg");
+const baseRightColumnX = usageData.left + usageData.plotWidth + 28;
 const presetSeconds = {
   five_hours: 5 * 60 * 60,
   one_day: 24 * 60 * 60,
@@ -977,6 +984,37 @@ function clearChildren(element) {
   while (element.firstChild) {
     element.removeChild(element.firstChild);
   }
+}
+
+function desiredLayoutWidth() {
+  const viewportWidth = Math.max(1, window.innerWidth || usageData.width);
+  const viewportHeight = Math.max(1, window.innerHeight || usageData.height);
+  return Math.max(
+    usageData.minWidth,
+    Math.ceil(usageData.height * (viewportWidth / viewportHeight))
+  );
+}
+
+function setAttrForEach(selector, name, value) {
+  document.querySelectorAll(selector).forEach((element) => {
+    element.setAttribute(name, String(value));
+  });
+}
+
+function applyResponsiveLayout() {
+  const layoutWidth = desiredLayoutWidth();
+  usageData.width = layoutWidth;
+  usageData.plotWidth = Math.max(600, layoutWidth - usageData.left - usageData.right);
+  const plotRight = usageData.left + usageData.plotWidth;
+  const rightColumnX = plotRight + 28;
+
+  svgRoot.setAttribute("viewBox", `0 0 ${layoutWidth} ${usageData.height}`);
+  document.getElementById("control-panel-fo").setAttribute("width", String(Math.max(1, layoutWidth - 64)));
+  document.getElementById("right-column").setAttribute("transform", `translate(${(rightColumnX - baseRightColumnX).toFixed(2)},0)`);
+  setAttrForEach(".plot-width", "width", usageData.plotWidth);
+  setAttrForEach(".plot-x2", "x2", plotRight);
+  setAttrForEach(".plot-right-x", "x", plotRight);
+  setAttrForEach(".plot-center-x", "x", usageData.left + usageData.plotWidth / 2);
 }
 
 function formatDate(timestamp) {
@@ -1058,9 +1096,15 @@ function queryVisibleFlag(name) {
   return queryParams.get(name) !== "0";
 }
 
+function queryLockedFlag(name) {
+  return queryParams.get(name) !== "0";
+}
+
 let activeSeriesIndexes = queryActiveSeriesIndexes();
 let resetGraphVisible = queryVisibleFlag("resetGraph");
 let flexibleGraphVisible = queryVisibleFlag("flexibleGraph");
+let resetScrollLocked = queryLockedFlag("resetLock");
+let flexibleScrollLocked = queryLockedFlag("flexibleLock");
 
 function selectedIntervalSeconds() {
   if (currentViewPreset === "all") {
@@ -1101,9 +1145,11 @@ function clampRangeEnd(value) {
   return Math.max(bounds.min, Math.min(bounds.max, value));
 }
 
-let currentRangeEnd = clampRangeEnd(
+let mainRangeEnd = clampRangeEnd(
   currentViewPreset === "custom" ? customEnd : queryRangeEnd()
 );
+let resetRangeEnd = clampRangeEnd(queryEpochParam("resetEnd"));
+let flexibleRangeEnd = clampRangeEnd(queryEpochParam("flexibleEnd"));
 let activeScroller = null;
 let isSyncingScroll = false;
 let scrollIdleTimer = null;
@@ -1140,6 +1186,23 @@ function scrollLeftToRangeEnd(scroller) {
   return clampRangeEnd(metrics.bounds.min + (scroller.scrollLeft / maxScroll) * metrics.span);
 }
 
+function rangeEndForScroller(scroller) {
+  const kind = scroller.dataset.rangeKind;
+  if (kind === "reset") {
+    return resetScrollLocked ? mainRangeEnd : resetRangeEnd;
+  }
+  if (kind === "flexible") {
+    return flexibleScrollLocked ? mainRangeEnd : flexibleRangeEnd;
+  }
+  return mainRangeEnd;
+}
+
+function labelForRange(range) {
+  return selectedIntervalSeconds() === null
+    ? "All recorded history"
+    : `Window ending ${formatDate(range.end)}`;
+}
+
 function syncScroller(scroller, rangeEnd) {
   const metrics = scrollMetrics();
   const filler = scroller.querySelector(".history-scroll-fill");
@@ -1154,10 +1217,9 @@ function syncScroller(scroller, rangeEnd) {
   }
 }
 
-function visibleRange() {
+function visibleRange(rangeEndValue) {
   const interval = selectedIntervalSeconds();
-  const end = interval === null ? usageData.last : clampRangeEnd(currentRangeEnd);
-  currentRangeEnd = end;
+  const end = interval === null ? usageData.last : clampRangeEnd(rangeEndValue);
   let start = interval === null ? usageData.first : end - interval;
   if (start < usageData.first) {
     start = usageData.first;
@@ -1165,11 +1227,23 @@ function visibleRange() {
   if (start >= end) {
     start = end - 1;
   }
-  if (currentViewPreset === "custom") {
-    customStart = start;
-    customEnd = end;
-  }
   return { start, end };
+}
+
+function mainVisibleRange() {
+  const range = visibleRange(mainRangeEnd);
+  mainRangeEnd = range.end;
+  if (currentViewPreset === "custom") {
+    customStart = range.start;
+    customEnd = range.end;
+  }
+  if (resetScrollLocked) {
+    resetRangeEnd = range.end;
+  }
+  if (flexibleScrollLocked) {
+    flexibleRangeEnd = range.end;
+  }
+  return range;
 }
 
 function xPosition(timestamp, range) {
@@ -1728,6 +1802,8 @@ function updateCustomControls(range) {
 function updateVisibilityControls() {
   document.getElementById("show-reset-credit").checked = resetGraphVisible;
   document.getElementById("show-flexible-credit").checked = flexibleGraphVisible;
+  document.getElementById("lock-reset-scroll").checked = resetScrollLocked;
+  document.getElementById("lock-flexible-scroll").checked = flexibleScrollLocked;
   document.documentElement.classList.toggle("hide-reset-graph", !resetGraphVisible);
   document.documentElement.classList.toggle("hide-flexible-graph", !flexibleGraphVisible);
   document.querySelectorAll(".series-toggle").forEach((checkbox) => {
@@ -1737,32 +1813,38 @@ function updateVisibilityControls() {
 }
 
 function render() {
+  applyResponsiveLayout();
   document.getElementById("view-preset").value = currentViewPreset;
-  const range = visibleRange();
+  const range = mainVisibleRange();
+  const resetRange = resetScrollLocked ? range : visibleRange(resetRangeEnd);
+  const flexibleRange = flexibleScrollLocked ? range : visibleRange(flexibleRangeEnd);
+  resetRangeEnd = resetRange.end;
+  flexibleRangeEnd = flexibleRange.end;
   const interval = selectedIntervalSeconds();
   const bounds = rangeEndBounds();
-  const panText = interval === null
-    ? "All recorded history"
-    : `Window ending ${formatDate(range.end)}`;
   document.querySelectorAll(".history-scroll").forEach((scroller) => {
     const disabled = interval === null || bounds.min === bounds.max;
     scroller.dataset.disabled = disabled ? "true" : "false";
     if (scroller !== activeScroller) {
-      syncScroller(scroller, range.end);
+      syncScroller(scroller, rangeEndForScroller(scroller));
     }
   });
-  document.querySelectorAll(".pan-label").forEach((label) => {
-    label.textContent = panText;
-  });
+  document.getElementById("usage-pan-label").textContent = labelForRange(range);
+  document.getElementById("reset-pan-label").textContent = labelForRange(resetRange);
+  document.getElementById("flexible-pan-label").textContent = labelForRange(flexibleRange);
   if (window.parent !== window) {
     window.parent.postMessage({
       type: "codex-meter-view-preset",
       value: currentViewPreset,
       end: range.end,
       start: range.start,
+      resetEnd: resetRange.end,
+      flexibleEnd: flexibleRange.end,
       series: Array.from(activeSeriesIndexes).sort((a, b) => a - b),
       resetGraphVisible,
-      flexibleGraphVisible
+      flexibleGraphVisible,
+      resetScrollLocked,
+      flexibleScrollLocked
     }, "*");
   }
   document.getElementById("start-label").textContent = formatDate(range.start);
@@ -1774,17 +1856,19 @@ function render() {
   renderSeries(range);
   renderWeeklyResets(range);
   if (resetGraphVisible) {
-    renderResetCredits(range);
+    renderResetCredits(resetRange);
   }
   if (flexibleGraphVisible) {
-    renderFlexibleCredits(range);
+    renderFlexibleCredits(flexibleRange);
   }
 }
 
 const viewPresetSelect = document.getElementById("view-preset");
 viewPresetSelect.addEventListener("change", () => {
   currentViewPreset = hasViewPreset(viewPresetSelect.value) ? viewPresetSelect.value : initialViewPreset();
-  currentRangeEnd = usageData.last;
+  mainRangeEnd = usageData.last;
+  resetRangeEnd = usageData.last;
+  flexibleRangeEnd = usageData.last;
   render();
 });
 document.querySelectorAll(".series-toggle").forEach((checkbox) => {
@@ -1806,6 +1890,20 @@ document.getElementById("show-flexible-credit").addEventListener("change", (even
   flexibleGraphVisible = event.target.checked;
   render();
 });
+document.getElementById("lock-reset-scroll").addEventListener("change", (event) => {
+  resetScrollLocked = event.target.checked;
+  if (resetScrollLocked) {
+    resetRangeEnd = mainRangeEnd;
+  }
+  render();
+});
+document.getElementById("lock-flexible-scroll").addEventListener("change", (event) => {
+  flexibleScrollLocked = event.target.checked;
+  if (flexibleScrollLocked) {
+    flexibleRangeEnd = mainRangeEnd;
+  }
+  render();
+});
 function applyCustomRangeInputs() {
   const start = localInputToEpoch(document.getElementById("custom-start").value);
   const end = localInputToEpoch(document.getElementById("custom-end").value);
@@ -1816,11 +1914,20 @@ function applyCustomRangeInputs() {
   customEnd = end;
   normalizeCustomRange();
   currentViewPreset = "custom";
-  currentRangeEnd = customEnd;
+  mainRangeEnd = customEnd;
+  if (resetScrollLocked) {
+    resetRangeEnd = customEnd;
+  }
+  if (flexibleScrollLocked) {
+    flexibleRangeEnd = customEnd;
+  }
   render();
 }
 document.getElementById("custom-start").addEventListener("change", applyCustomRangeInputs);
 document.getElementById("custom-end").addEventListener("change", applyCustomRangeInputs);
+window.addEventListener("resize", () => {
+  render();
+});
 document.querySelectorAll(".history-scroll").forEach((scroller) => {
   scroller.addEventListener("pointerdown", () => {
     activeScroller = scroller;
@@ -1848,7 +1955,21 @@ document.querySelectorAll(".history-scroll").forEach((scroller) => {
     }
     activeScroller = scroller;
     window.clearTimeout(scrollIdleTimer);
-    currentRangeEnd = scrollLeftToRangeEnd(scroller);
+    const rangeEnd = scrollLeftToRangeEnd(scroller);
+    const kind = scroller.dataset.rangeKind;
+    if (kind === "reset" && !resetScrollLocked) {
+      resetRangeEnd = rangeEnd;
+    } else if (kind === "flexible" && !flexibleScrollLocked) {
+      flexibleRangeEnd = rangeEnd;
+    } else {
+      mainRangeEnd = rangeEnd;
+      if (resetScrollLocked) {
+        resetRangeEnd = rangeEnd;
+      }
+      if (flexibleScrollLocked) {
+        flexibleRangeEnd = rangeEnd;
+      }
+    }
     render();
     scrollIdleTimer = window.setTimeout(() => {
       if (activeScroller === scroller) {
@@ -1862,9 +1983,9 @@ render();
 """.replace("__USAGE_DATA__", data_json)
 
     parts = [
-        '<svg xmlns="http://www.w3.org/2000/svg" '
+        '<svg id="codex-meter-svg" xmlns="http://www.w3.org/2000/svg" '
         f'width="100vw" height="100vh" viewBox="0 0 {width} {height}" '
-        'preserveAspectRatio="xMidYMid meet" '
+        'preserveAspectRatio="xMidYMin meet" '
         'style="width:100vw;height:100vh;display:block;background:#f8fafc">',
         '<rect width="100%" height="100%" fill="#f8fafc"/>',
         "<style>"
@@ -1886,8 +2007,9 @@ render();
         ".usage-pan-row{display:flex;align-items:center;gap:10px;"
         "font-family:system-ui,-apple-system,sans-serif;font-size:12px;color:#334155}"
         ".usage-pan-row span{white-space:nowrap}"
-        ".usage-pan-row span:first-child{flex:0 0 118px}"
+        ".usage-pan-row span:first-child{flex:0 0 126px}"
         ".usage-pan-row .pan-label{flex:0 0 238px;text-align:right}"
+        ".scroll-lock{display:flex;align-items:center;gap:4px;white-space:nowrap;color:#334155}"
         ".history-scroll{flex:1;min-width:0;height:16px;overflow-x:auto;overflow-y:hidden;"
         "scrollbar-gutter:stable;background:transparent}"
         ".history-scroll[data-disabled=true]{opacity:.45;pointer-events:none}"
@@ -1899,7 +2021,7 @@ render();
         'font-size="22" font-weight="700" fill="#0f172a">Codex usage limits</text>',
         '<text x="32" y="58" font-family="system-ui, -apple-system, sans-serif" '
         f'font-size="13" fill="#475569">{html.escape(header_status)}</text>',
-        '<foreignObject x="32" y="72" width="980" height="84">',
+        f'<foreignObject id="control-panel-fo" x="32" y="72" width="{width - 64}" height="84">',
         '<div xmlns="http://www.w3.org/1999/xhtml" class="control-panel">',
         '<div class="usage-control-row">',
         '<label>View '
@@ -1917,14 +2039,14 @@ render();
         '<text id="range-label" x="32" y="158" '
         'font-family="system-ui, -apple-system, sans-serif" '
         'font-size="12" fill="#475569"></text>',
-        f'<rect x="{left}" y="{top}" width="{plot_width}" height="{plot_height}" '
+        f'<rect class="plot-width" x="{left}" y="{top}" width="{plot_width}" height="{plot_height}" '
         'fill="#ffffff" stroke="#cbd5e1"/>',
     ]
 
     for percent in (0, 25, 50, 75, 100):
         y = svg_y(percent, top, plot_height)
         parts.append(
-            f'<line x1="{left}" y1="{y:.2f}" x2="{left + plot_width}" '
+            f'<line class="plot-x2" x1="{left}" y1="{y:.2f}" x2="{left + plot_width}" '
             f'y2="{y:.2f}" stroke="#e2e8f0"/>'
         )
         parts.append(
@@ -1937,19 +2059,20 @@ render();
     parts.append('<g id="weekly-reset-layer"></g>')
     parts.append('<g id="day-label-layer"></g>')
     parts.append(
-        f'<foreignObject x="{left}" y="{top + plot_height + 28}" '
+        f'<foreignObject class="plot-width" x="{left}" y="{top + plot_height + 28}" '
         f'width="{plot_width}" height="28">'
     )
     parts.append(
         '<div xmlns="http://www.w3.org/1999/xhtml" class="usage-pan-row">'
         '<span>Browse usage</span>'
-        '<div class="history-scroll"><div class="history-scroll-fill"></div></div>'
-        '<span class="pan-label"></span>'
+        '<div class="history-scroll" data-range-kind="main"><div class="history-scroll-fill"></div></div>'
+        '<span id="usage-pan-label" class="pan-label"></span>'
         '</div>'
     )
     parts.append("</foreignObject>")
     expiry_x = left + plot_width + 28
     reset_summary_y = top + 18 + len(series_data) * 24 + 32
+    parts.append('<g id="right-column">')
     parts.append(
         f'<text x="{expiry_x}" y="{reset_summary_y}" '
         'font-family="system-ui, -apple-system, sans-serif" '
@@ -2032,6 +2155,7 @@ render();
         'font-size="10" fill="#64748b">'
         f'Inference uses reset banking from {RESET_CREDIT_BANKING_INTRO_LABEL}</text>'
     )
+    parts.append("</g>")
     parts.append(
         f'<text class="reset-graph-section" x="{left}" y="{reset_top - 16}" '
         'font-family="system-ui, -apple-system, sans-serif" '
@@ -2039,13 +2163,13 @@ render();
         "Reset credits available</text>"
     )
     parts.append(
-        f'<text class="reset-graph-section" id="reset-current-label" x="{left + plot_width}" '
+        f'<text class="reset-graph-section plot-right-x" id="reset-current-label" x="{left + plot_width}" '
         f'y="{reset_top - 16}" text-anchor="end" '
         'font-family="system-ui, -apple-system, sans-serif" '
         'font-size="12" fill="#475569"></text>'
     )
     parts.append(
-        f'<rect class="reset-graph-section" x="{left}" y="{reset_top}" width="{plot_width}" '
+        f'<rect class="reset-graph-section plot-width" x="{left}" y="{reset_top}" width="{plot_width}" '
         f'height="{reset_height}" fill="#ffffff" stroke="#cbd5e1"/>'
     )
     for count_label, y in (
@@ -2058,7 +2182,7 @@ render();
             'font-size="12" fill="#475569"></text>'
         )
     parts.append(
-        f'<line class="reset-graph-section" x1="{left}" y1="{reset_top + reset_height:.2f}" '
+        f'<line class="reset-graph-section plot-x2" x1="{left}" y1="{reset_top + reset_height:.2f}" '
         f'x2="{left + plot_width}" y2="{reset_top + reset_height:.2f}" '
         'stroke="#e2e8f0"/>'
     )
@@ -2066,14 +2190,15 @@ render();
     parts.append('<g class="reset-graph-section" id="reset-day-label-layer"></g>')
 
     parts.append(
-        f'<foreignObject class="reset-graph-section" x="{left}" y="{reset_top + reset_height + 30}" '
+        f'<foreignObject class="reset-graph-section plot-width" x="{left}" y="{reset_top + reset_height + 30}" '
         f'width="{plot_width}" height="28">'
     )
     parts.append(
         '<div xmlns="http://www.w3.org/1999/xhtml" class="usage-pan-row">'
         '<span>Browse reset credits</span>'
-        '<div class="history-scroll"><div class="history-scroll-fill"></div></div>'
-        '<span class="pan-label"></span>'
+        '<label class="scroll-lock"><input id="lock-reset-scroll" type="checkbox" checked="checked"/> Lock scroll</label>'
+        '<div class="history-scroll" data-range-kind="reset"><div class="history-scroll-fill"></div></div>'
+        '<span id="reset-pan-label" class="pan-label"></span>'
         '</div>'
     )
     parts.append("</foreignObject>")
@@ -2084,13 +2209,13 @@ render();
         "Flexible credit balance</text>"
     )
     parts.append(
-        f'<text class="flexible-graph-section" id="flexible-current-label" x="{left + plot_width}" '
+        f'<text class="flexible-graph-section plot-right-x" id="flexible-current-label" x="{left + plot_width}" '
         f'y="{flexible_top - 16}" text-anchor="end" '
         'font-family="system-ui, -apple-system, sans-serif" '
         'font-size="12" fill="#475569"></text>'
     )
     parts.append(
-        f'<rect class="flexible-graph-section" x="{left}" y="{flexible_top}" width="{plot_width}" '
+        f'<rect class="flexible-graph-section plot-width" x="{left}" y="{flexible_top}" width="{plot_width}" '
         f'height="{flexible_height}" fill="#ffffff" stroke="#cbd5e1"/>'
     )
     for balance_label, y in (
@@ -2103,21 +2228,22 @@ render();
             'font-size="12" fill="#475569"></text>'
         )
     parts.append(
-        f'<line class="flexible-graph-section" x1="{left}" y1="{flexible_top + flexible_height:.2f}" '
+        f'<line class="flexible-graph-section plot-x2" x1="{left}" y1="{flexible_top + flexible_height:.2f}" '
         f'x2="{left + plot_width}" y2="{flexible_top + flexible_height:.2f}" '
         'stroke="#e2e8f0"/>'
     )
     parts.append('<g class="flexible-graph-section" id="flexible-day-grid"></g>')
     parts.append('<g class="flexible-graph-section" id="flexible-day-label-layer"></g>')
     parts.append(
-        f'<foreignObject class="flexible-graph-section" x="{left}" y="{flexible_top + flexible_height + 30}" '
+        f'<foreignObject class="flexible-graph-section plot-width" x="{left}" y="{flexible_top + flexible_height + 30}" '
         f'width="{plot_width}" height="28">'
     )
     parts.append(
         '<div xmlns="http://www.w3.org/1999/xhtml" class="usage-pan-row">'
         '<span>Browse flexible credits</span>'
-        '<div class="history-scroll"><div class="history-scroll-fill"></div></div>'
-        '<span class="pan-label"></span>'
+        '<label class="scroll-lock"><input id="lock-flexible-scroll" type="checkbox" checked="checked"/> Lock scroll</label>'
+        '<div class="history-scroll" data-range-kind="flexible"><div class="history-scroll-fill"></div></div>'
+        '<span id="flexible-pan-label" class="pan-label"></span>'
         '</div>'
     )
     parts.append("</foreignObject>")
@@ -2127,26 +2253,26 @@ render();
         'font-size="12" fill="#475569"></text>'
     )
     parts.append(
-        f'<text id="end-label" x="{left + plot_width}" y="{height - 36}" text-anchor="end" '
+        f'<text class="plot-right-x" id="end-label" x="{left + plot_width}" y="{height - 36}" text-anchor="end" '
         'font-family="system-ui, -apple-system, sans-serif" '
         'font-size="12" fill="#475569"></text>'
     )
     parts.append(
-        f'<text id="empty-message" x="{left + plot_width / 2:.2f}" '
+        f'<text class="plot-center-x" id="empty-message" x="{left + plot_width / 2:.2f}" '
         f'y="{top + plot_height / 2:.2f}" text-anchor="middle" '
         'font-family="system-ui, -apple-system, sans-serif" '
         'font-size="13" fill="#64748b" display="none">'
         "No snapshots in selected window</text>"
     )
     parts.append(
-        f'<text class="reset-graph-section" id="reset-empty-message" x="{left + plot_width / 2:.2f}" '
+        f'<text class="reset-graph-section plot-center-x" id="reset-empty-message" x="{left + plot_width / 2:.2f}" '
         f'y="{reset_top + reset_height / 2:.2f}" text-anchor="middle" '
         'font-family="system-ui, -apple-system, sans-serif" '
         'font-size="12" fill="#64748b" display="none">'
         "No reset-credit history in selected window</text>"
     )
     parts.append(
-        f'<text class="flexible-graph-section" id="flexible-empty-message" x="{left + plot_width / 2:.2f}" '
+        f'<text class="flexible-graph-section plot-center-x" id="flexible-empty-message" x="{left + plot_width / 2:.2f}" '
         f'y="{flexible_top + flexible_height / 2:.2f}" text-anchor="middle" '
         'font-family="system-ui, -apple-system, sans-serif" '
         'font-size="12" fill="#64748b" display="none">'
@@ -2210,9 +2336,13 @@ def render_html() -> None:
     let selectedViewPreset = null;
     let selectedRangeStart = null;
     let selectedRangeEnd = null;
+    let selectedResetRangeEnd = null;
+    let selectedFlexibleRangeEnd = null;
     let selectedSeries = null;
     let selectedResetGraphVisible = null;
     let selectedFlexibleGraphVisible = null;
+    let selectedResetScrollLocked = null;
+    let selectedFlexibleScrollLocked = null;
 
     window.addEventListener("message", (event) => {{
       const data = event.data;
@@ -2224,6 +2354,8 @@ def render_html() -> None:
         selectedViewPreset = data.value;
         selectedRangeStart = Number.isFinite(data.start) ? data.start : selectedRangeStart;
         selectedRangeEnd = Number.isFinite(data.end) ? data.end : selectedRangeEnd;
+        selectedResetRangeEnd = Number.isFinite(data.resetEnd) ? data.resetEnd : selectedResetRangeEnd;
+        selectedFlexibleRangeEnd = Number.isFinite(data.flexibleEnd) ? data.flexibleEnd : selectedFlexibleRangeEnd;
         selectedSeries = Array.isArray(data.series) ? data.series : selectedSeries;
         selectedResetGraphVisible =
           typeof data.resetGraphVisible === "boolean"
@@ -2233,6 +2365,14 @@ def render_html() -> None:
           typeof data.flexibleGraphVisible === "boolean"
             ? data.flexibleGraphVisible
             : selectedFlexibleGraphVisible;
+        selectedResetScrollLocked =
+          typeof data.resetScrollLocked === "boolean"
+            ? data.resetScrollLocked
+            : selectedResetScrollLocked;
+        selectedFlexibleScrollLocked =
+          typeof data.flexibleScrollLocked === "boolean"
+            ? data.flexibleScrollLocked
+            : selectedFlexibleScrollLocked;
       }}
     }});
 
@@ -2248,6 +2388,12 @@ def render_html() -> None:
       if (selectedRangeEnd !== null) {{
         params.set("end", String(selectedRangeEnd));
       }}
+      if (selectedResetRangeEnd !== null) {{
+        params.set("resetEnd", String(selectedResetRangeEnd));
+      }}
+      if (selectedFlexibleRangeEnd !== null) {{
+        params.set("flexibleEnd", String(selectedFlexibleRangeEnd));
+      }}
       if (selectedSeries !== null) {{
         params.set("series", selectedSeries.join(","));
       }}
@@ -2256,6 +2402,12 @@ def render_html() -> None:
       }}
       if (selectedFlexibleGraphVisible === false) {{
         params.set("flexibleGraph", "0");
+      }}
+      if (selectedResetScrollLocked === false) {{
+        params.set("resetLock", "0");
+      }}
+      if (selectedFlexibleScrollLocked === false) {{
+        params.set("flexibleLock", "0");
       }}
       return `usage.svg?${{params.toString()}}`;
     }}
