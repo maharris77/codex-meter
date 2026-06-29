@@ -13,6 +13,22 @@ Codex already shows current usage. This tool keeps a local timeline so you can
 see how each returned limit changes over time, including the 5-hour and 7-day
 usage windows and their exact reset timestamps.
 
+## Why Use It
+
+Codex Meter is most useful when Codex is doing sustained work across several
+threads or delegated workers and current usage needs to guide scheduling.
+
+- Front-load fresh 5-hour windows while there is room, then taper only when the
+  local meter is genuinely close to the breaker.
+- Keep long-running goals from hitting a 5-hour cap and then sitting idle after
+  the next reset.
+- Use weekly quota intentionally, including deciding when to keep a run going
+  after a weekly cap is reached so in-flight work can finish.
+- Plan work and ETAs from observed reset times, usage slopes, reset-credit
+  availability, and natural/manual/hard reset events.
+- Let another local project read `latest.json` or `snapshots.jsonl` for bounded
+  quota-aware coordination without scraping a UI.
+
 ## What It Does
 
 The collector starts the local Codex app-server, calls
@@ -57,7 +73,7 @@ dates.
 
 - macOS only.
 - Uses the local Codex app-server exposed by the Codex app and CLI.
-- Tested on Codex.app `26.513.31313` and `codex-cli 0.130.0`.
+- Tested on Codex.app `26.623.70822` and `codex-cli 0.142.3`.
 - Tracks the response returned by `account/rateLimits/read`; it is not official
   OpenAI analytics or billing history.
 - The local JSON files include plan type, usage percentages, credit state, and
