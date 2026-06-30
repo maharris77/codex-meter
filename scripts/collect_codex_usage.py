@@ -1151,8 +1151,6 @@ let mainRangeEnd = clampRangeEnd(
 let resetRangeEnd = clampRangeEnd(queryEpochParam("resetEnd"));
 let flexibleRangeEnd = clampRangeEnd(queryEpochParam("flexibleEnd"));
 let activeScroller = null;
-let isSyncingScroll = false;
-let scrollIdleTimer = null;
 
 function scrollMetrics() {
   const bounds = rangeEndBounds();
@@ -1203,17 +1201,17 @@ function labelForRange(range) {
     : `Window ending ${formatDate(range.end)}`;
 }
 
+function followsLatest(range) {
+  return currentViewPreset !== "custom" && Math.abs(range.end - usageData.last) <= 1;
+}
+
 function syncScroller(scroller, rangeEnd) {
   const metrics = scrollMetrics();
   const filler = scroller.querySelector(".history-scroll-fill");
   filler.style.width = `${Math.max(scroller.clientWidth + 1, Math.ceil(metrics.span * metrics.scale) + scroller.clientWidth)}px`;
   const targetScrollLeft = rangeEndToScrollLeft(scroller, rangeEnd);
   if (Math.abs(scroller.scrollLeft - targetScrollLeft) > 1) {
-    isSyncingScroll = true;
     scroller.scrollLeft = targetScrollLeft;
-    window.setTimeout(() => {
-      isSyncingScroll = false;
-    }, 0);
   }
 }
 
@@ -1840,6 +1838,9 @@ function render() {
       start: range.start,
       resetEnd: resetRange.end,
       flexibleEnd: flexibleRange.end,
+      mainFollowsLatest: followsLatest(range),
+      resetFollowsLatest: followsLatest(resetRange),
+      flexibleFollowsLatest: followsLatest(flexibleRange),
       series: Array.from(activeSeriesIndexes).sort((a, b) => a - b),
       resetGraphVisible,
       flexibleGraphVisible,
@@ -1947,14 +1948,12 @@ document.querySelectorAll(".history-scroll").forEach((scroller) => {
     }
   });
   scroller.addEventListener("scroll", () => {
-    if (isSyncingScroll) {
-      return;
-    }
     if (scroller.dataset.disabled === "true") {
       return;
     }
-    activeScroller = scroller;
-    window.clearTimeout(scrollIdleTimer);
+    if (activeScroller !== scroller) {
+      return;
+    }
     const rangeEnd = scrollLeftToRangeEnd(scroller);
     const kind = scroller.dataset.rangeKind;
     if (kind === "reset" && !resetScrollLocked) {
@@ -1971,12 +1970,6 @@ document.querySelectorAll(".history-scroll").forEach((scroller) => {
       }
     }
     render();
-    scrollIdleTimer = window.setTimeout(() => {
-      if (activeScroller === scroller) {
-        activeScroller = null;
-        render();
-      }
-    }, 160);
   });
 });
 render();
@@ -2352,10 +2345,25 @@ def render_html() -> None:
         && validViewPresets.has(data.value)
       ) {{
         selectedViewPreset = data.value;
-        selectedRangeStart = Number.isFinite(data.start) ? data.start : selectedRangeStart;
-        selectedRangeEnd = Number.isFinite(data.end) ? data.end : selectedRangeEnd;
-        selectedResetRangeEnd = Number.isFinite(data.resetEnd) ? data.resetEnd : selectedResetRangeEnd;
-        selectedFlexibleRangeEnd = Number.isFinite(data.flexibleEnd) ? data.flexibleEnd : selectedFlexibleRangeEnd;
+        if (data.mainFollowsLatest === true) {{
+          selectedRangeStart = null;
+          selectedRangeEnd = null;
+        }} else {{
+          selectedRangeStart = Number.isFinite(data.start) ? data.start : selectedRangeStart;
+          selectedRangeEnd = Number.isFinite(data.end) ? data.end : selectedRangeEnd;
+        }}
+        selectedResetRangeEnd =
+          data.resetFollowsLatest === true
+            ? null
+            : Number.isFinite(data.resetEnd)
+              ? data.resetEnd
+              : selectedResetRangeEnd;
+        selectedFlexibleRangeEnd =
+          data.flexibleFollowsLatest === true
+            ? null
+            : Number.isFinite(data.flexibleEnd)
+              ? data.flexibleEnd
+              : selectedFlexibleRangeEnd;
         selectedSeries = Array.isArray(data.series) ? data.series : selectedSeries;
         selectedResetGraphVisible =
           typeof data.resetGraphVisible === "boolean"
