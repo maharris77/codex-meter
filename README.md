@@ -52,54 +52,70 @@ When the response includes Codex flexible credits, Codex Meter tracks
 `~/Documents/Archives/Codex Meter/flexible_credit_events.jsonl`, and the balance
 is plotted as a separate flexible-credit graph below the reset-credit graph.
 
-The SVG graph defaults to the past 7 days unless the local settings file
-chooses another default view. Set `defaultViewPreset` in
-`~/Documents/Archives/Codex Meter/settings.json` to one of `five_hours`,
-`one_day`, `seven_days`, `thirty_days`, or `all`. The repo default remains
-`seven_days`; missing or invalid settings fall back to that default. The
-view dropdown reflects the current open graph view, starting from the configured
-default and changing only when you choose another view. The custom range option
-shows start and end fields for choosing an exact local time range. The
-synchronized browse controls below the usage, reset-credit, and flexible-credit
-graphs pan the selected time window through older snapshots; visible graphs stay
-locked to the same range. The line toggles show or hide individual usage-limit
-series on the main graph, and the supplemental graph toggles show or hide reset
-credits and flexible credits.
-When reset-credit data is available, the graph header shows the current count
-and the reset-credit strip shows the first count captured in local history plus
-later count changes over the selected time range. Flexible credit balance is
-shown in a separate lower graph and is not a reset-credit count. The view
-dropdown and browse controls only change what the graph displays; the sampling
-interval is set by the LaunchAgent installer.
-Weekly usage-limit resets are labeled on the main graph as natural, manual,
-hard, inferred, or uncertain early resets. Natural resets are resets observed at
-the scheduled weekly reset time, manual resets are early resets with a
-reset-credit decrease, and hard resets are early usage resets when reset-credit
-data is present and did not decrease. Codex Meter treats reset-credit banking as
-available starting with Codex app `26.609` on `2026-06-11`, based on the
-[Codex changelog](https://developers.openai.com/codex/changelog): ambiguous
-early resets before that date are labeled `hard reset (pre-credits)`, while
-ambiguous early Codex resets after that date and before the first observed
-post-banking hard reset in local history are labeled `manual reset (?)`.
-`early reset (?)` means the reset happened early but reset-credit data was
-unavailable and the era rule cannot distinguish manual from hard.
-The reset-credit section also shows an estimated reset-credit-use count with an
-observed/inferred split. This estimate counts observed manual resets plus
-post-`2026-06-11` inferred manual resets; it does not count natural resets or
-pre-credit hard resets.
-Usage series use colorblind-friendlier colors and distinct line styles so color
-is not the only cue. The right side of the graph shows Codex's next natural
-5-hour and weekly reset times. If the weekly reset is due before the 5-hour
-reset, the 5-hour line uses the weekly reset time because local history shows
-the Codex 5-hour window resets with that weekly reset. This summary is only for
-the main Codex limit; Spark remains a separate graphed series.
-The graph also shows a current estimate based on Codex's 30-day
-reset-credit expiration rule. Expiration labels are drawn inside the
-reset-credit strip just left of each visible credit-count change and the present
-edge, with older credits above newer credits. A separate table shows the
-current available-credit expiration estimate. Credits already present when local
-tracking first observed reset-credit data are labeled with uncertain expiration
-dates.
+### Graph Controls
+
+- The SVG defaults to the past 7 days. To change the local default, set
+  `defaultViewPreset` in
+  `~/Documents/Archives/Codex Meter/settings.json` to `five_hours`, `one_day`,
+  `seven_days`, `thirty_days`, or `all`.
+- Missing or invalid settings fall back to the repo default, `seven_days`.
+- The view dropdown reflects the open graph view. It starts from the configured
+  default and changes only when you choose another view.
+- Custom range shows start and end fields for choosing an exact local time
+  range.
+- The browse controls below the usage, reset-credit, and flexible-credit graphs
+  pan the selected window through older snapshots. Visible graphs stay locked to
+  the same range while their lock controls are enabled.
+- Line toggles show or hide individual usage-limit series on the main graph.
+  Supplemental graph toggles show or hide reset credits and flexible credits.
+- View and browse controls only change what the graph displays. The sampling
+  interval is set by the LaunchAgent installer.
+
+### Credit Graphs
+
+- When reset-credit data is available, the graph header shows the current reset
+  credit count.
+- The reset-credit strip shows the first count captured in local history plus
+  later count changes over the selected time range.
+- Flexible credit balance is shown in a separate lower graph. It is not a reset
+  credit count.
+- The graph estimates reset-credit expirations using Codex's 30-day expiration
+  rule. Expiration labels appear inside the reset-credit strip just left of each
+  visible credit-count change and the present edge, with older credits above
+  newer credits.
+- A separate table shows the current available-credit expiration estimate.
+  Credits already present when local tracking first observed reset-credit data
+  are labeled with uncertain expiration dates.
+
+### Reset Labels And Timing
+
+- Weekly usage-limit resets are labeled on the main graph as natural, manual,
+  hard, inferred, or uncertain early resets.
+- Natural resets are observed at the scheduled weekly reset time.
+- Manual resets are early resets with a reset-credit decrease.
+- Hard resets are early usage resets where reset-credit data is present and did
+  not decrease.
+- Codex Meter treats reset-credit banking as available starting with Codex app
+  `26.609` on `2026-06-11`, based on the
+  [Codex changelog](https://developers.openai.com/codex/changelog).
+- Ambiguous early resets before `2026-06-11` are labeled
+  `hard reset (pre-credits)`. Ambiguous early Codex resets after that date and
+  before the first observed post-banking hard reset in local history are labeled
+  `manual reset (?)`.
+- `early reset (?)` means the reset happened early, but reset-credit data was
+  unavailable and the era rule cannot distinguish manual from hard.
+- The reset-credit section shows an estimated reset-credit-use count with an
+  observed/inferred split. This counts observed manual resets plus
+  post-`2026-06-11` inferred manual resets; it does not count natural resets or
+  pre-credit hard resets.
+- Usage series use colorblind-friendlier colors and distinct line styles so
+  color is not the only cue.
+- The right side of the graph shows Codex's next natural 5-hour and weekly reset
+  times. If the weekly reset is due before the 5-hour reset, the 5-hour line
+  uses the weekly reset time because local history shows the Codex 5-hour window
+  resets with that weekly reset.
+- This reset summary is only for the main Codex limit. Spark remains a separate
+  graphed series.
 
 ## Scope
 
