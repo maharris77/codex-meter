@@ -2011,7 +2011,7 @@ render();
         ".hide-flexible-graph .flexible-graph-section{display:none}"
         "</style>",
         '<text x="32" y="34" font-family="system-ui, -apple-system, sans-serif" '
-        'font-size="22" font-weight="700" fill="#0f172a">Codex usage limits</text>',
+        'font-size="22" font-weight="700" fill="#0f172a">CodexMeter</text>',
         '<text x="32" y="58" font-family="system-ui, -apple-system, sans-serif" '
         f'font-size="13" fill="#475569">{html.escape(header_status)}</text>',
         f'<foreignObject id="control-panel-fo" x="32" y="72" width="{width - 64}" height="84">',
