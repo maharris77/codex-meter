@@ -1064,7 +1064,10 @@ function queryEpochParam(name) {
 
 function normalizeCustomRange() {
   const defaultEnd = usageData.last;
-  const defaultStart = Math.max(usageData.first, defaultEnd - presetSeconds.seven_days);
+  const defaultDuration = Number.isFinite(customDuration)
+    ? Math.max(1, customDuration)
+    : presetSeconds.seven_days;
+  const defaultStart = Math.max(usageData.first, defaultEnd - defaultDuration);
   if (!Number.isFinite(customStart) || !Number.isFinite(customEnd)) {
     customStart = defaultStart;
     customEnd = defaultEnd;
@@ -1075,6 +1078,7 @@ function normalizeCustomRange() {
 
 let customStart = queryEpochParam("start");
 let customEnd = queryEpochParam("end");
+let customDuration = queryEpochParam("duration");
 normalizeCustomRange();
 
 function queryActiveSeriesIndexes() {
@@ -1202,7 +1206,7 @@ function labelForRange(range) {
 }
 
 function followsLatest(range) {
-  return currentViewPreset !== "custom" && Math.abs(range.end - usageData.last) <= 1;
+  return Math.abs(range.end - usageData.last) <= 1;
 }
 
 function syncScroller(scroller, rangeEnd) {
@@ -1836,6 +1840,7 @@ function render() {
       value: currentViewPreset,
       end: range.end,
       start: range.start,
+      duration: range.end - range.start,
       resetEnd: resetRange.end,
       flexibleEnd: flexibleRange.end,
       mainFollowsLatest: followsLatest(range),
@@ -2329,6 +2334,7 @@ def render_html() -> None:
     let selectedViewPreset = null;
     let selectedRangeStart = null;
     let selectedRangeEnd = null;
+    let selectedRangeDuration = null;
     let selectedResetRangeEnd = null;
     let selectedFlexibleRangeEnd = null;
     let selectedSeries = null;
@@ -2345,6 +2351,10 @@ def render_html() -> None:
         && validViewPresets.has(data.value)
       ) {{
         selectedViewPreset = data.value;
+        selectedRangeDuration =
+          data.value === "custom" && Number.isFinite(data.duration)
+            ? data.duration
+            : null;
         if (data.mainFollowsLatest === true) {{
           selectedRangeStart = null;
           selectedRangeEnd = null;
@@ -2395,6 +2405,14 @@ def render_html() -> None:
       }}
       if (selectedRangeEnd !== null) {{
         params.set("end", String(selectedRangeEnd));
+      }}
+      if (
+        selectedViewPreset === "custom"
+        && selectedRangeDuration !== null
+        && selectedRangeStart === null
+        && selectedRangeEnd === null
+      ) {{
+        params.set("duration", String(selectedRangeDuration));
       }}
       if (selectedResetRangeEnd !== null) {{
         params.set("resetEnd", String(selectedResetRangeEnd));
