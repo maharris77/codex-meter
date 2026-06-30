@@ -906,15 +906,6 @@ def render_svg(snapshots: list[dict[str, Any]]) -> None:
     view_preset_options = "".join(
         view_preset_option(value) for value in VIEW_PRESETS
     )
-    series_controls = "".join(
-        (
-            '<label class="series-choice">'
-            f'<input class="series-toggle" type="checkbox" data-series-index="{index}" checked="checked"/>'
-            f'<span style="border-color:{html.escape(series["color"])}"></span>'
-            f'{html.escape(series["label"])}</label>'
-        )
-        for index, series in enumerate(series_data)
-    )
     data_json = json.dumps(
         {
             "first": first,
@@ -1456,11 +1447,33 @@ function renderSeries(range) {
     }
 
     const legendY = usageData.top + 18 + index * 24;
+    const legendX = usageData.left + usageData.plotWidth + 28;
     const opacity = active ? (visiblePoints.length ? 1 : 0.35) : 0.18;
+    const checkboxContainer = svgElement("foreignObject", {
+      x: legendX,
+      y: legendY - 16,
+      width: 20,
+      height: 20
+    });
+    const checkbox = document.createElementNS("http://www.w3.org/1999/xhtml", "input");
+    checkbox.setAttribute("class", "series-toggle legend-series-toggle");
+    checkbox.setAttribute("type", "checkbox");
+    checkbox.dataset.seriesIndex = String(index);
+    checkbox.checked = active;
+    checkbox.addEventListener("change", () => {
+      if (checkbox.checked) {
+        activeSeriesIndexes.add(index);
+      } else {
+        activeSeriesIndexes.delete(index);
+      }
+      render();
+    });
+    checkboxContainer.appendChild(checkbox);
+    legendLayer.appendChild(checkboxContainer);
     legendLayer.appendChild(svgElement("line", {
-      x1: usageData.left + usageData.plotWidth + 28,
+      x1: legendX + 28,
       y1: legendY - 4,
-      x2: usageData.left + usageData.plotWidth + 48,
+      x2: legendX + 48,
       y2: legendY - 4,
       stroke: series.color,
       "stroke-width": 3,
@@ -1468,7 +1481,7 @@ function renderSeries(range) {
       opacity
     }));
     const label = svgElement("text", {
-      x: usageData.left + usageData.plotWidth + 56,
+      x: legendX + 56,
       y: legendY,
       "font-family": "system-ui, -apple-system, sans-serif",
       "font-size": 12,
@@ -1808,10 +1821,6 @@ function updateVisibilityControls() {
   document.getElementById("lock-flexible-scroll").checked = flexibleScrollLocked;
   document.documentElement.classList.toggle("hide-reset-graph", !resetGraphVisible);
   document.documentElement.classList.toggle("hide-flexible-graph", !flexibleGraphVisible);
-  document.querySelectorAll(".series-toggle").forEach((checkbox) => {
-    const index = Number(checkbox.dataset.seriesIndex);
-    checkbox.checked = activeSeriesIndexes.has(index);
-  });
 }
 
 function render() {
@@ -1876,17 +1885,6 @@ viewPresetSelect.addEventListener("change", () => {
   resetRangeEnd = usageData.last;
   flexibleRangeEnd = usageData.last;
   render();
-});
-document.querySelectorAll(".series-toggle").forEach((checkbox) => {
-  checkbox.addEventListener("change", () => {
-    const index = Number(checkbox.dataset.seriesIndex);
-    if (checkbox.checked) {
-      activeSeriesIndexes.add(index);
-    } else {
-      activeSeriesIndexes.delete(index);
-    }
-    render();
-  });
 });
 document.getElementById("show-reset-credit").addEventListener("change", (event) => {
   resetGraphVisible = event.target.checked;
@@ -1992,15 +1990,14 @@ render();
         ".reset-expiration-label{cursor:help}.reset-expiration-label:hover{fill:#0f172a}"
         ".control-panel{display:flex;flex-direction:column;gap:7px;"
         "font-family:system-ui,-apple-system,sans-serif;font-size:13px;color:#334155}"
-        ".usage-control-row,.series-control-row{display:flex;align-items:center;gap:10px;flex-wrap:wrap}"
-        ".usage-control-row label,.series-choice{display:flex;align-items:center;gap:5px}"
+        ".usage-control-row{display:flex;align-items:center;gap:10px;flex-wrap:wrap}"
+        ".usage-control-row label{display:flex;align-items:center;gap:5px}"
         ".usage-control-row select,.usage-control-row input[type=datetime-local]{height:28px;"
         "box-sizing:border-box;border:1px solid #cbd5e1;border-radius:4px;"
         "background:#fff;color:#0f172a;padding:3px 6px;font:inherit}"
         ".custom-range-controls{display:flex;align-items:center;gap:8px}"
         ".custom-range-controls[hidden]{display:none}"
-        ".series-choice{font-size:12px;color:#334155}"
-        ".series-choice span{width:14px;height:0;border-top:3px solid;display:inline-block}"
+        ".legend-series-toggle{width:14px;height:14px;margin:0}"
         ".supplement-toggle{font-size:12px;color:#334155}"
         ".usage-pan-row{display:flex;align-items:center;gap:10px;"
         "font-family:system-ui,-apple-system,sans-serif;font-size:12px;color:#334155}"
@@ -2019,7 +2016,7 @@ render();
         'font-size="22" font-weight="700" fill="#0f172a">CodexMeter</text>',
         '<text x="32" y="58" font-family="system-ui, -apple-system, sans-serif" '
         f'font-size="13" fill="#475569">{html.escape(header_status)}</text>',
-        f'<foreignObject id="control-panel-fo" x="32" y="72" width="{width - 64}" height="84">',
+        f'<foreignObject id="control-panel-fo" x="32" y="72" width="{width - 64}" height="56">',
         '<div xmlns="http://www.w3.org/1999/xhtml" class="control-panel">',
         '<div class="usage-control-row">',
         '<label>View '
@@ -2031,7 +2028,6 @@ render();
         '<label class="supplement-toggle"><input id="show-reset-credit" type="checkbox" checked="checked"/> Reset-credit graph</label>'
         '<label class="supplement-toggle"><input id="show-flexible-credit" type="checkbox" checked="checked"/> Flexible-credit graph</label>',
         "</div>",
-        f'<div class="series-control-row">{series_controls}</div>',
         "</div>",
         "</foreignObject>",
         '<text id="range-label" x="32" y="158" '
