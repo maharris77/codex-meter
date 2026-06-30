@@ -57,17 +57,20 @@ is plotted as a separate flexible-credit graph below the reset-credit graph.
 - The SVG defaults to the past 7 days. To change the local default, set
   `defaultViewPreset` in
   `~/Documents/Archives/Codex Meter/settings.json` to `five_hours`, `one_day`,
-  `seven_days`, `thirty_days`, or `all`.
+  `seven_days`, `thirty_days`, `all`, or `custom`.
 - Missing or invalid settings fall back to the repo default, `seven_days`.
 - The view dropdown reflects the open graph view. It starts from the configured
   default and changes only when you choose another view.
 - Custom range shows start and end fields for choosing an exact local time
-  range.
+  range. The browser remembers the last custom duration; unless `Lock custom
+  range` is checked, choosing Custom reuses that duration ending at the latest
+  sample.
 - The browse controls below the usage, reset-credit, and flexible-credit graphs
   pan the selected window through older snapshots. Visible graphs stay locked to
   the same range while their lock controls are enabled.
 - Line toggles show or hide individual usage-limit series on the main graph.
   Supplemental graph toggles show or hide reset credits and flexible credits.
+- Checkbox choices are remembered by the browser across page reloads.
 - View and browse controls only change what the graph displays. The sampling
   interval is set by the LaunchAgent installer.
 

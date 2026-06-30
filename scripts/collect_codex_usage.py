@@ -245,7 +245,6 @@ def load_default_view_preset() -> str:
     if (
         isinstance(default_view_preset, str)
         and default_view_preset in VIEW_PRESETS
-        and default_view_preset != "custom"
     ):
         return default_view_preset
     return DEFAULT_VIEW_PRESET
@@ -1067,9 +1066,10 @@ function normalizeCustomRange() {
   customEnd = Math.max(customStart + 1, Math.min(usageData.last, customEnd));
 }
 
-let customStart = queryEpochParam("start");
-let customEnd = queryEpochParam("end");
+let customStart = queryEpochParam("customStart") ?? queryEpochParam("start");
+let customEnd = queryEpochParam("customEnd") ?? queryEpochParam("end");
 let customDuration = queryEpochParam("duration");
+let customRangeLocked = queryParams.get("customLock") === "1";
 normalizeCustomRange();
 
 function queryActiveSeriesIndexes() {
@@ -1198,6 +1198,16 @@ function labelForRange(range) {
 
 function followsLatest(range) {
   return Math.abs(range.end - usageData.last) <= 1;
+}
+
+function moveUnlockedCustomRangeToLatest() {
+  if (customRangeLocked) {
+    return;
+  }
+  customDuration = Math.max(1, customEnd - customStart);
+  customEnd = usageData.last;
+  customStart = Math.max(usageData.first, customEnd - customDuration);
+  mainRangeEnd = customEnd;
 }
 
 function syncScroller(scroller, rangeEnd) {
@@ -1807,6 +1817,7 @@ function updateCustomControls(range) {
   if (currentViewPreset !== "custom") {
     return;
   }
+  document.getElementById("lock-custom-range").checked = customRangeLocked;
   const activeElement = document.activeElement;
   if (!activeElement || !activeElement.classList.contains("custom-range-input")) {
     document.getElementById("custom-start").value = epochToLocalInput(range.start);
@@ -1852,10 +1863,13 @@ function render() {
       duration: range.end - range.start,
       resetEnd: resetRange.end,
       flexibleEnd: flexibleRange.end,
-      mainFollowsLatest: followsLatest(range),
+      mainFollowsLatest: currentViewPreset === "custom" && customRangeLocked
+        ? false
+        : followsLatest(range),
       resetFollowsLatest: followsLatest(resetRange),
       flexibleFollowsLatest: followsLatest(flexibleRange),
       series: Array.from(activeSeriesIndexes).sort((a, b) => a - b),
+      customRangeLocked,
       resetGraphVisible,
       flexibleGraphVisible,
       resetScrollLocked,
@@ -1881,9 +1895,15 @@ function render() {
 const viewPresetSelect = document.getElementById("view-preset");
 viewPresetSelect.addEventListener("change", () => {
   currentViewPreset = hasViewPreset(viewPresetSelect.value) ? viewPresetSelect.value : initialViewPreset();
-  mainRangeEnd = usageData.last;
-  resetRangeEnd = usageData.last;
-  flexibleRangeEnd = usageData.last;
+  if (currentViewPreset === "custom") {
+    normalizeCustomRange();
+    moveUnlockedCustomRangeToLatest();
+    mainRangeEnd = customEnd;
+  } else {
+    mainRangeEnd = usageData.last;
+  }
+  resetRangeEnd = mainRangeEnd;
+  flexibleRangeEnd = mainRangeEnd;
   render();
 });
 document.getElementById("show-reset-credit").addEventListener("change", (event) => {
@@ -1917,6 +1937,7 @@ function applyCustomRangeInputs() {
   customStart = start;
   customEnd = end;
   normalizeCustomRange();
+  customDuration = Math.max(1, customEnd - customStart);
   currentViewPreset = "custom";
   mainRangeEnd = customEnd;
   if (resetScrollLocked) {
@@ -1929,6 +1950,19 @@ function applyCustomRangeInputs() {
 }
 document.getElementById("custom-start").addEventListener("change", applyCustomRangeInputs);
 document.getElementById("custom-end").addEventListener("change", applyCustomRangeInputs);
+document.getElementById("lock-custom-range").addEventListener("change", (event) => {
+  customRangeLocked = event.target.checked;
+  normalizeCustomRange();
+  customDuration = Math.max(1, customEnd - customStart);
+  moveUnlockedCustomRangeToLatest();
+  if (resetScrollLocked) {
+    resetRangeEnd = mainRangeEnd;
+  }
+  if (flexibleScrollLocked) {
+    flexibleRangeEnd = mainRangeEnd;
+  }
+  render();
+});
 window.addEventListener("resize", () => {
   render();
 });
@@ -2024,6 +2058,7 @@ render();
         '<div id="custom-range-controls" class="custom-range-controls" hidden="hidden">'
         '<label>Start <input id="custom-start" class="custom-range-input" type="datetime-local"/></label>'
         '<label>End <input id="custom-end" class="custom-range-input" type="datetime-local"/></label>'
+        '<label class="supplement-toggle"><input id="lock-custom-range" type="checkbox"/> Lock custom range</label>'
         '</div>'
         '<label class="supplement-toggle"><input id="show-reset-credit" type="checkbox" checked="checked"/> Reset-credit graph</label>'
         '<label class="supplement-toggle"><input id="show-flexible-credit" type="checkbox" checked="checked"/> Flexible-credit graph</label>',
@@ -2284,6 +2319,7 @@ render();
 
 def render_html() -> None:
     view_presets_json = json.dumps(VIEW_PRESETS, separators=(",", ":"))
+    default_view_preset_json = json.dumps(load_default_view_preset())
     HTML_PATH.write_text(
         f"""<!doctype html>
 <html lang="en">
@@ -2325,19 +2361,93 @@ def render_html() -> None:
   <script>
     const refreshSeconds = {HTML_REFRESH_SECONDS};
     const validViewPresets = new Set({view_presets_json});
+    const defaultViewPreset = {default_view_preset_json};
     const graphFrame = document.getElementById("graph-frame");
     const status = document.getElementById("status");
-    let selectedViewPreset = null;
+    const customDurationKey = "codex-meter.customRangeDuration";
+    const customLockKey = "codex-meter.customRangeLocked";
+    const customStartKey = "codex-meter.customRangeStart";
+    const customEndKey = "codex-meter.customRangeEnd";
+    const seriesKey = "codex-meter.series";
+    const resetGraphVisibleKey = "codex-meter.resetGraphVisible";
+    const flexibleGraphVisibleKey = "codex-meter.flexibleGraphVisible";
+    const resetScrollLockedKey = "codex-meter.resetScrollLocked";
+    const flexibleScrollLockedKey = "codex-meter.flexibleScrollLocked";
+
+    function storageGet(key) {{
+      try {{
+        return window.localStorage.getItem(key);
+      }} catch (_error) {{
+        return null;
+      }}
+    }}
+
+    function storageSet(key, value) {{
+      try {{
+        window.localStorage.setItem(key, value);
+      }} catch (_error) {{
+      }}
+    }}
+
+    function storageRemove(key) {{
+      try {{
+        window.localStorage.removeItem(key);
+      }} catch (_error) {{
+      }}
+    }}
+
+    function storedNumber(key) {{
+      const rawValue = storageGet(key);
+      if (rawValue === null) {{
+        return null;
+      }}
+      const value = Number(rawValue);
+      return Number.isFinite(value) ? value : null;
+    }}
+
+    function storedBoolean(key) {{
+      const rawValue = storageGet(key);
+      if (rawValue === "1") {{
+        return true;
+      }}
+      if (rawValue === "0") {{
+        return false;
+      }}
+      return null;
+    }}
+
+    function saveBoolean(key, value) {{
+      storageSet(key, value ? "1" : "0");
+    }}
+
+    function storedSeries() {{
+      const rawValue = storageGet(seriesKey);
+      if (rawValue === null) {{
+        return null;
+      }}
+      const values = rawValue
+        .split(",")
+        .filter((part) => part !== "")
+        .map((part) => Number(part))
+        .filter((value) => Number.isInteger(value) && value >= 0);
+      return values;
+    }}
+
+    const storedCustomRangeLocked = storedBoolean(customLockKey);
+    let selectedViewPreset = defaultViewPreset === "custom" ? "custom" : null;
     let selectedRangeStart = null;
     let selectedRangeEnd = null;
-    let selectedRangeDuration = null;
+    let selectedRangeDuration = storedNumber(customDurationKey);
+    let selectedCustomRangeLocked = storedCustomRangeLocked === true;
+    let selectedCustomRangeStart = storedNumber(customStartKey);
+    let selectedCustomRangeEnd = storedNumber(customEndKey);
     let selectedResetRangeEnd = null;
     let selectedFlexibleRangeEnd = null;
-    let selectedSeries = null;
-    let selectedResetGraphVisible = null;
-    let selectedFlexibleGraphVisible = null;
-    let selectedResetScrollLocked = null;
-    let selectedFlexibleScrollLocked = null;
+    let selectedSeries = storedSeries();
+    let selectedResetGraphVisible = storedBoolean(resetGraphVisibleKey);
+    let selectedFlexibleGraphVisible = storedBoolean(flexibleGraphVisibleKey);
+    let selectedResetScrollLocked = storedBoolean(resetScrollLockedKey);
+    let selectedFlexibleScrollLocked = storedBoolean(flexibleScrollLockedKey);
 
     window.addEventListener("message", (event) => {{
       const data = event.data;
@@ -2347,16 +2457,33 @@ def render_html() -> None:
         && validViewPresets.has(data.value)
       ) {{
         selectedViewPreset = data.value;
-        selectedRangeDuration =
-          data.value === "custom" && Number.isFinite(data.duration)
-            ? data.duration
-            : null;
+        if (data.value === "custom" && Number.isFinite(data.duration)) {{
+          selectedRangeDuration = data.duration;
+          storageSet(customDurationKey, String(data.duration));
+        }}
+        if (data.value === "custom" && typeof data.customRangeLocked === "boolean") {{
+          selectedCustomRangeLocked = data.customRangeLocked;
+          saveBoolean(customLockKey, data.customRangeLocked);
+        }}
         if (data.mainFollowsLatest === true) {{
           selectedRangeStart = null;
           selectedRangeEnd = null;
         }} else {{
           selectedRangeStart = Number.isFinite(data.start) ? data.start : selectedRangeStart;
           selectedRangeEnd = Number.isFinite(data.end) ? data.end : selectedRangeEnd;
+        }}
+        if (data.value === "custom" && selectedCustomRangeLocked) {{
+          if (Number.isFinite(data.start) && Number.isFinite(data.end)) {{
+            selectedCustomRangeStart = data.start;
+            selectedCustomRangeEnd = data.end;
+            storageSet(customStartKey, String(data.start));
+            storageSet(customEndKey, String(data.end));
+          }}
+        }} else if (data.value === "custom") {{
+          selectedCustomRangeStart = null;
+          selectedCustomRangeEnd = null;
+          storageRemove(customStartKey);
+          storageRemove(customEndKey);
         }}
         selectedResetRangeEnd =
           data.resetFollowsLatest === true
@@ -2370,23 +2497,38 @@ def render_html() -> None:
             : Number.isFinite(data.flexibleEnd)
               ? data.flexibleEnd
               : selectedFlexibleRangeEnd;
-        selectedSeries = Array.isArray(data.series) ? data.series : selectedSeries;
+        if (Array.isArray(data.series)) {{
+          selectedSeries = data.series;
+          storageSet(seriesKey, data.series.join(","));
+        }}
         selectedResetGraphVisible =
           typeof data.resetGraphVisible === "boolean"
             ? data.resetGraphVisible
             : selectedResetGraphVisible;
+        if (typeof data.resetGraphVisible === "boolean") {{
+          saveBoolean(resetGraphVisibleKey, data.resetGraphVisible);
+        }}
         selectedFlexibleGraphVisible =
           typeof data.flexibleGraphVisible === "boolean"
             ? data.flexibleGraphVisible
             : selectedFlexibleGraphVisible;
+        if (typeof data.flexibleGraphVisible === "boolean") {{
+          saveBoolean(flexibleGraphVisibleKey, data.flexibleGraphVisible);
+        }}
         selectedResetScrollLocked =
           typeof data.resetScrollLocked === "boolean"
             ? data.resetScrollLocked
             : selectedResetScrollLocked;
+        if (typeof data.resetScrollLocked === "boolean") {{
+          saveBoolean(resetScrollLockedKey, data.resetScrollLocked);
+        }}
         selectedFlexibleScrollLocked =
           typeof data.flexibleScrollLocked === "boolean"
             ? data.flexibleScrollLocked
             : selectedFlexibleScrollLocked;
+        if (typeof data.flexibleScrollLocked === "boolean") {{
+          saveBoolean(flexibleScrollLockedKey, data.flexibleScrollLocked);
+        }}
       }}
     }});
 
@@ -2396,19 +2538,23 @@ def render_html() -> None:
       if (selectedViewPreset !== null) {{
         params.set("view", selectedViewPreset);
       }}
+      if (selectedRangeDuration !== null) {{
+        params.set("duration", String(selectedRangeDuration));
+      }}
+      if (selectedCustomRangeLocked) {{
+        params.set("customLock", "1");
+      }}
+      if (selectedCustomRangeLocked && selectedCustomRangeStart !== null) {{
+        params.set("customStart", String(selectedCustomRangeStart));
+      }}
+      if (selectedCustomRangeLocked && selectedCustomRangeEnd !== null) {{
+        params.set("customEnd", String(selectedCustomRangeEnd));
+      }}
       if (selectedRangeStart !== null) {{
         params.set("start", String(selectedRangeStart));
       }}
       if (selectedRangeEnd !== null) {{
         params.set("end", String(selectedRangeEnd));
-      }}
-      if (
-        selectedViewPreset === "custom"
-        && selectedRangeDuration !== null
-        && selectedRangeStart === null
-        && selectedRangeEnd === null
-      ) {{
-        params.set("duration", String(selectedRangeDuration));
       }}
       if (selectedResetRangeEnd !== null) {{
         params.set("resetEnd", String(selectedResetRangeEnd));
