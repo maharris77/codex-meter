@@ -5,7 +5,7 @@ and renders them as a history graph.
 
 ![Example Codex usage graph](docs/example-usage.png)
 
-The generated SVG is interactive: use the view dropdown to switch time windows
+The browser graph is interactive: use the view dropdown to switch time windows
 or choose a custom range, use the synchronized browse controls below the plots
 to pan that window through older history, toggle individual usage-limit lines,
 hide supplemental graphs, and hover over plotted dots for details.
@@ -37,8 +37,8 @@ The collector starts the local Codex app-server, calls
 
 - `~/Documents/Archives/Codex Meter/snapshots.jsonl`
 - `~/Documents/Archives/Codex Meter/latest.json`
-- `~/Documents/Archives/Codex Meter/usage.svg`
 - `~/Documents/Archives/Codex Meter/usage.html`
+- `~/Documents/Archives/Codex Meter/usage.svg`
 - `~/Documents/Archives/Codex Meter/settings.json`
 
 When the app-server response includes reset credits, the collector also watches
@@ -56,7 +56,7 @@ is plotted as a separate flexible-credit graph below the reset-credit graph.
 
 ### Graph Controls
 
-- The SVG defaults to the past 7 days. To change the local default, set
+- The browser graph defaults to the past 7 days. To change the local default, set
   `defaultViewPreset` in
   `~/Documents/Archives/Codex Meter/settings.json` to `five_hours`, `one_day`,
   `seven_days`, `thirty_days`, `all`, or `custom`.
@@ -165,27 +165,20 @@ When the flexible credit balance changes, it writes
 ## Open The Graph
 
 ```sh
-open -a Safari "$HOME/Documents/Archives/Codex Meter/usage.svg"
+open -a Safari "$HOME/Documents/Archives/Codex Meter/usage.html"
 ```
 
 Chrome works too:
 
 ```sh
-open -a "Google Chrome" "$HOME/Documents/Archives/Codex Meter/usage.svg"
+open -a "Google Chrome" "$HOME/Documents/Archives/Codex Meter/usage.html"
 ```
 
-Hover directly over the plotted dots for the point details.
-
-For an auto-refreshing browser view, open the generated HTML wrapper:
-
-```sh
-open -a Safari "$HOME/Documents/Archives/Codex Meter/usage.html"
-```
-
-It reloads the graph every 30 seconds, so a browser left open picks up the next
-collector-written SVG without a manual refresh. The configured default view is
-used when the HTML file first opens; timed refreshes keep the current graph view
-selected in the dropdown.
+Hover directly over the plotted dots for the point details. The page reloads the
+embedded graph every 30 seconds, so a browser left open picks up new collector
+output without a manual refresh. The configured default view is used when the
+HTML file first opens; timed refreshes keep the current graph view selected in
+the dropdown.
 
 ## Run On Startup
 
@@ -224,7 +217,7 @@ client name, and output archive use the Codex Meter name.
 
 ## Repository Contents
 
-- `scripts/collect_codex_usage.py`: the collector and SVG renderer.
+- `scripts/collect_codex_usage.py`: the collector and graph renderer.
 - `scripts/install_launch_agent.py`: the LaunchAgent installer.
 - `scripts/migrate_to_codex_meter.py`: the old-name data migration.
 - `docs/example-usage.png`: example graph shown in this README.
