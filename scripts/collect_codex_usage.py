@@ -81,8 +81,11 @@ def format_epoch_local(epoch_seconds: int | float | None) -> str:
 def format_epoch_local_date(epoch_seconds: int | float | None) -> str:
     if epoch_seconds is None:
         return "uncertain"
-    return datetime.fromtimestamp(epoch_seconds, timezone.utc).astimezone().strftime(
-        "%Y-%m-%d"
+    return (
+        datetime.fromtimestamp(epoch_seconds, timezone.utc)
+        .astimezone()
+        .strftime("%b %d")
+        .replace(" 0", " ")
     )
 
 
@@ -1679,9 +1682,11 @@ function renderResetCreditExpirationLabels(layer, range, maxCount) {
   const plotLeft = usageData.left;
   const plotRight = usageData.left + usageData.plotWidth;
   const labelInset = 8;
+  const minimumLabelSpacing = 96;
+  const placedLabels = [];
   const visibleAnchors = usageData.resetCredit.expirationAnchors.filter(
     (anchor) => anchor.timestamp >= range.start && anchor.timestamp <= range.end && anchor.count > 0
-  );
+  ).sort((leftAnchor, rightAnchor) => rightAnchor.timestamp - leftAnchor.timestamp);
 
   for (const anchor of visibleAnchors) {
     const labelX = Math.max(plotLeft + 82, Math.min(plotRight - 4, xPosition(anchor.timestamp, range) - labelInset));
@@ -1691,6 +1696,13 @@ function renderResetCreditExpirationLabels(layer, range, maxCount) {
         usageData.resetTop + usageData.resetHeight - 3,
         resetYPosition(creditLevel, maxCount) + 11
       );
+      const overlapsPlacedLabel = placedLabels.some((label) =>
+        Math.abs(label.y - y) < 12 && Math.abs(label.x - labelX) < minimumLabelSpacing
+      );
+      if (overlapsPlacedLabel) {
+        return;
+      }
+      placedLabels.push({ x: labelX, y });
       const title = svgElement("title");
       title.textContent = `${lot.expiresLabel} - added ${lot.addedAtText} - ${lot.uncertain ? "uncertain date" : "Current estimate based on 30-day expiration"}`;
       const text = svgElement("text", {
