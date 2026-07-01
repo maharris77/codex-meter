@@ -47,6 +47,8 @@ snapshot, Codex Meter appends an event to
 `~/Documents/Archives/Codex Meter/reset_credit_events.jsonl` and sends a macOS
 notification.
 
+![Example reset-credit notification](docs/example-reset-credit-notification.png)
+
 When the response includes Codex flexible credits, Codex Meter tracks
 `credits.balance` separately from reset credits. Balance changes are appended to
 `~/Documents/Archives/Codex Meter/flexible_credit_events.jsonl`, and the balance
