@@ -21,6 +21,7 @@ PYTHON_BIN = "/opt/homebrew/opt/python@3.13/bin/python3.13"
 DEFAULT_AMOUNT = 5
 DEFAULT_UNIT = "minutes"
 UNIT_SECONDS = {
+    "second": 1,
     "minute": 60,
     "hour": 60 * 60,
     "day": 24 * 60 * 60,
