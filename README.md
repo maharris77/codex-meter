@@ -192,11 +192,12 @@ python3 scripts/install_launch_agent.py
 To choose another sampling interval, pass a positive number and one unit:
 
 ```sh
+python3 scripts/install_launch_agent.py 30 seconds
 python3 scripts/install_launch_agent.py 15 minutes
 python3 scripts/install_launch_agent.py 1 hour
 ```
 
-Supported units are `minutes`, `hours`, and `days`.
+Supported units are `seconds`, `minutes`, `hours`, and `days`.
 
 If you used the old `codex-usage-tracker` name, the installer migrates existing
 snapshots from `~/Documents/Archives/Codex Usage Tracker/` into
