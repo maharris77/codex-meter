@@ -223,6 +223,7 @@ client name, and output archive use the Codex Meter name.
 - `scripts/migrate_to_codex_meter.py`: the old-name data migration.
 - `docs/example-usage.png`: example graph shown in this README.
 - `docs/research.md`: notes on the data source and related projects.
+- `docs/roadmap.md`: planned dashboard, telemetry, and optional module work.
 
 ## License
 
