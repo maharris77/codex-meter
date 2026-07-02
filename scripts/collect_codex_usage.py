@@ -1263,7 +1263,9 @@ for (const series of usageData.series) {
 const svgNS = "http://www.w3.org/2000/svg";
 const queryParams = new URLSearchParams(window.location.search);
 const svgRoot = document.getElementById("codex-meter-svg");
-const baseRightColumnX = usageData.left + usageData.plotWidth + 28;
+const currentValueGap = 8;
+const rightColumnGap = 54;
+const baseRightColumnX = usageData.left + usageData.plotWidth + rightColumnGap;
 const presetSeconds = {
   five_hours: 5 * 60 * 60,
   one_day: 24 * 60 * 60,
@@ -1315,7 +1317,7 @@ function applyResponsiveLayout() {
   usageData.width = layoutWidth;
   usageData.plotWidth = Math.max(600, layoutWidth - usageData.left - usageData.right);
   const plotRight = usageData.left + usageData.plotWidth;
-  const rightColumnX = plotRight + 28;
+  const rightColumnX = plotRight + rightColumnGap;
 
   svgRoot.setAttribute("viewBox", `0 0 ${layoutWidth} ${usageData.height}`);
   document.getElementById("control-panel-fo").setAttribute("width", String(Math.max(1, layoutWidth - 64)));
@@ -1736,16 +1738,27 @@ function renderDayBoundaries(range) {
 function renderSeries(range) {
   const seriesLayer = document.getElementById("series-layer");
   const legendLayer = document.getElementById("legend-layer");
+  const currentValueLayer = document.getElementById("current-value-layer");
   const emptyMessage = document.getElementById("empty-message");
   clearChildren(seriesLayer);
   clearChildren(legendLayer);
+  clearChildren(currentValueLayer);
   let visiblePointCount = 0;
+  const currentValueLabels = [];
 
   usageData.series.forEach((series, index) => {
     const active = activeSeriesIndexes.has(index);
     const visiblePoints = series.points.filter(
       (point) => active && point.timestamp >= range.start && point.timestamp <= range.end
     );
+    const latestPoint = series.points.length ? series.points[series.points.length - 1] : null;
+    if (active && latestPoint && Number.isFinite(latestPoint.percent)) {
+      currentValueLabels.push({
+        series,
+        point: latestPoint,
+        targetY: yPosition(latestPoint.percent)
+      });
+    }
     visiblePointCount += visiblePoints.length;
     if (visiblePoints.length > 1) {
       const pathData = visiblePoints.map((point, pointIndex) => {
@@ -1776,7 +1789,7 @@ function renderSeries(range) {
     }
 
     const legendY = usageData.top + 18 + index * 24;
-    const legendX = usageData.left + usageData.plotWidth + 28;
+    const legendX = usageData.left + usageData.plotWidth + rightColumnGap;
     const opacity = active ? (visiblePoints.length ? 1 : 0.35) : 0.18;
     const checkboxContainer = svgElement("foreignObject", {
       x: legendX,
@@ -1821,10 +1834,97 @@ function renderSeries(range) {
     legendLayer.appendChild(label);
   });
 
+  renderCurrentValueLabels(currentValueLayer, currentValueLabels);
+
   emptyMessage.textContent = activeSeriesIndexes.size
     ? "No snapshots in selected window"
     : "No usage lines selected";
   emptyMessage.setAttribute("display", visiblePointCount ? "none" : "block");
+}
+
+function spacedCurrentLabelPositions(labels) {
+  const minY = usageData.top + 12;
+  const maxY = usageData.top + usageData.plotHeight - 8;
+  const minSpacing = 16;
+  const positioned = labels
+    .map((label) => ({
+      ...label,
+      y: Math.max(minY, Math.min(maxY, label.targetY))
+    }))
+    .sort((a, b) => a.y - b.y);
+
+  for (let index = 1; index < positioned.length; index += 1) {
+    const previous = positioned[index - 1];
+    const current = positioned[index];
+    if (current.y - previous.y < minSpacing) {
+      current.y = previous.y + minSpacing;
+    }
+  }
+
+  const overflow = positioned.length ? positioned[positioned.length - 1].y - maxY : 0;
+  if (overflow > 0) {
+    for (const label of positioned) {
+      label.y -= overflow;
+    }
+  }
+
+  for (let index = 0; index < positioned.length; index += 1) {
+    positioned[index].y = Math.max(minY, Math.min(maxY, positioned[index].y));
+    if (index > 0 && positioned[index].y - positioned[index - 1].y < minSpacing) {
+      positioned[index].y = Math.min(maxY, positioned[index - 1].y + minSpacing);
+    }
+  }
+
+  return positioned;
+}
+
+function renderCurrentValueLabels(layer, labels) {
+  if (!labels.length) {
+    return;
+  }
+  const plotRight = usageData.left + usageData.plotWidth;
+  const labelX = plotRight + currentValueGap;
+  const header = svgElement("text", {
+    x: labelX,
+    y: usageData.top - 8,
+    "font-family": "system-ui, -apple-system, sans-serif",
+    "font-size": 10,
+    fill: "#64748b"
+  });
+  header.textContent = "Current";
+  layer.appendChild(header);
+
+  for (const label of spacedCurrentLabelPositions(labels)) {
+    const actualY = yPosition(label.point.percent);
+    layer.appendChild(svgElement("line", {
+      x1: (plotRight - 5).toFixed(2),
+      y1: actualY.toFixed(2),
+      x2: (plotRight + 4).toFixed(2),
+      y2: actualY.toFixed(2),
+      stroke: label.series.color,
+      "stroke-width": 2,
+      "stroke-dasharray": label.series.dash || "none"
+    }));
+
+    const text = svgElement("text", {
+      class: "current-meter-label",
+      x: labelX,
+      y: (label.y + 4).toFixed(2),
+      "font-family": "system-ui, -apple-system, sans-serif",
+      "font-size": 11,
+      "font-weight": 700,
+      fill: label.series.color,
+      stroke: "#ffffff",
+      "stroke-width": 3,
+      "paint-order": "stroke fill"
+    });
+    const percentText = label.point.percentText || formatPercent(label.point.percent);
+    text.textContent = percentText;
+    const title = svgElement("title");
+    title.textContent = `Current ${label.series.label} - ${label.point.localTime} - ${percentText} used`;
+    text.appendChild(title);
+    layer.appendChild(text);
+  }
 }
 
 function weeklyResetLabel(type) {
@@ -2428,7 +2528,7 @@ render();
         '</div>'
     )
     parts.append("</foreignObject>")
-    expiry_x = left + plot_width + 28
+    expiry_x = left + plot_width + 54
     reset_summary_y = top + 18 + len(collected_series) * 24 + 32
     parts.append('<g id="right-column">')
     parts.append(
@@ -2639,6 +2739,7 @@ render();
     parts.append('<g id="series-layer"></g>')
     parts.append('<g class="reset-graph-section" id="reset-credit-layer"></g>')
     parts.append('<g class="flexible-graph-section" id="flexible-credit-layer"></g>')
+    parts.append('<g id="current-value-layer"></g>')
     parts.append('<g id="legend-layer"></g>')
 
     parts.append(data_metadata)
