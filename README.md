@@ -1,23 +1,23 @@
 # Codex Meter
 
-Codex Meter is a tiny macOS tool that records local Codex usage-limit snapshots
-and renders them as a history graph.
+Codex Meter is a tiny macOS tool that records the shared usage-limit snapshots
+returned for Codex and ChatGPT Work, then renders them as a history graph.
 
-![Example Codex usage graph](docs/example-usage.png)
+![Example Codex and Work usage graph](docs/example-usage.png)
 
 The browser graph is interactive: use the view dropdown to switch time windows
 or choose a custom range, use the synchronized browse controls below the plots
 to pan that window through older history, toggle individual usage-limit lines,
 hide supplemental graphs, and hover over plotted dots for details.
 
-Codex already shows current usage. This tool keeps a local timeline so you can
-see how each returned limit changes over time, including the 5-hour and 7-day
-usage windows and their exact reset timestamps.
+ChatGPT already shows current usage. This tool keeps a local timeline so you can
+see how each returned limit changes over time, including the shared 5-hour and
+7-day usage windows and their exact reset timestamps.
 
 ## Why Use It
 
-Codex Meter is most useful when Codex is doing sustained work across several
-threads or delegated workers and current usage needs to guide scheduling.
+Codex Meter is most useful when Codex threads, delegated workers, or ChatGPT
+Work tasks are doing sustained work and current usage needs to guide scheduling.
 
 - Front-load fresh 5-hour windows while there is room, then taper only when the
   local meter is genuinely close to the breaker.
@@ -32,8 +32,8 @@ threads or delegated workers and current usage needs to guide scheduling.
 
 ## What It Does
 
-The collector starts the local Codex app-server, calls
-`account/rateLimits/read`, and writes local files:
+The collector starts the Codex app-server bundled inside the ChatGPT desktop
+app, calls `account/rateLimits/read`, and writes local files:
 
 - `~/Documents/Archives/Codex Meter/snapshots.jsonl`
 - `~/Documents/Archives/Codex Meter/latest.json`
@@ -94,8 +94,8 @@ is plotted as a separate flexible-credit graph below the reset-credit graph.
 
 ### Reset Labels And Timing
 
-- Weekly usage-limit resets are labeled on the main graph as natural, manual,
-  hard, inferred, or uncertain early resets.
+- Weekly usage-limit resets for the shared `codex` bucket are labeled on the
+  main graph as natural, manual, hard, inferred, or uncertain early resets.
 - Natural resets are observed at the scheduled weekly reset time.
 - Manual resets are early resets with a reset-credit decrease.
 - Hard resets are early usage resets where reset-credit data is present and did
@@ -115,18 +115,22 @@ is plotted as a separate flexible-credit graph below the reset-credit graph.
   pre-credit hard resets.
 - Usage series use colorblind-friendlier colors and distinct line styles so
   color is not the only cue.
-- The right side of the graph shows Codex's next natural 5-hour and weekly reset
-  times. If the weekly reset is due before the 5-hour reset, the 5-hour line
-  uses the weekly reset time because local history shows the Codex 5-hour window
-  resets with that weekly reset.
-- This reset summary is only for the main Codex limit. Spark remains a separate
-  graphed series.
+- The right side of the graph shows the shared Codex + Work bucket's next
+  natural 5-hour and weekly reset times. If the weekly reset is due before the
+  5-hour reset, the 5-hour line uses the weekly reset time because local history
+  shows the 5-hour window resets with that weekly reset.
+- This reset summary is only for the main shared limit. Spark remains a
+  separate graphed series.
 
 ## Scope
 
 - macOS only.
-- Uses the local Codex app-server exposed by the Codex app and CLI.
-- Tested on Codex.app `26.623.70822` and `codex-cli 0.142.3`.
+- Uses the Codex app-server bundled inside the current ChatGPT desktop app.
+- Tested on ChatGPT.app `26.707.30751` (`com.openai.codex`) with its bundled
+  `codex-cli 0.144.0-alpha.4`.
+- The main `codex` bucket is shared by Codex and Work. Codex Meter records the
+  combined quota but cannot attribute each percentage point to one mode.
+- Standalone Codex.app releases before `26.707` are not supported.
 - Tracks the response returned by `account/rateLimits/read`; it is not official
   OpenAI analytics or billing history.
 - The local JSON files include plan type, usage percentages, credit state, and
@@ -138,14 +142,13 @@ is plotted as a separate flexible-credit graph below the reset-credit graph.
 
 This is an unofficial local utility. No warranty at all, not even that it works
 as intended. It calls a local Codex app-server method that may change, move, or
-disappear in future Codex releases. It records your own local usage-limit
+disappear in future ChatGPT releases. It records your own local usage-limit
 snapshots, including the raw app-server rate-limit result with plan type, credit
 state, limit IDs, window lengths, reset timestamps, and used percentages.
 
 ## Requirements
 
-- Codex app installed and signed in.
-- Codex CLI at `/opt/homebrew/bin/codex`.
+- ChatGPT desktop app installed at `/Applications/ChatGPT.app` and signed in.
 - Homebrew Python at `/opt/homebrew/opt/python@3.13/bin/python3.13`.
 
 ## Run Once

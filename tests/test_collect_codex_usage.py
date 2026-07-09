@@ -78,6 +78,16 @@ def snapshot(
 
 
 class UsageSnapshotValidationTests(unittest.TestCase):
+    def test_main_limit_label_includes_work(self) -> None:
+        codex = limit("codex", None, 10, 9_000, 49, 10_000)
+
+        self.assertEqual(
+            meter.series_label(
+                "codex", codex, "secondary", codex["secondary"]
+            ),
+            "Codex + Work 7-day window",
+        )
+
     def test_transient_zero_is_held_without_reset_event(self) -> None:
         snapshots = [
             snapshot(1_000, 49, 10_000),

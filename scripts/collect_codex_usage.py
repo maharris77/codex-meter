@@ -31,7 +31,7 @@ FLEXIBLE_CREDIT_EVENTS_PATH = OUTPUT_DIR / "flexible_credit_events.jsonl"
 SETTINGS_PATH = OUTPUT_DIR / "settings.json"
 APP_SERVER_INITIALIZE_TIMEOUT_SECONDS = 120
 RATE_LIMIT_READ_TIMEOUT_SECONDS = 30
-CODEX_BIN = "/opt/homebrew/bin/codex"
+CODEX_BIN = "/Applications/ChatGPT.app/Contents/Resources/codex"
 PROJECT_VERSION = "0.6.3"
 RESET_TIME_TOLERANCE_SECONDS = 10 * 60
 RESET_TIMESTAMP_JITTER_SECONDS = 15
@@ -512,11 +512,11 @@ def window_label(window_name: str, window: dict[str, Any]) -> str:
 
 
 def display_limit_name(limit_id: str, limit_snapshot: dict[str, Any]) -> str:
+    if limit_id == "codex":
+        return "Codex + Work"
     limit_name = limit_snapshot.get("limitName")
     if isinstance(limit_name, str) and limit_name:
         return limit_name
-    if limit_id == "codex":
-        return "Codex"
     return limit_id
 
 
@@ -2001,7 +2001,7 @@ function renderWeeklyResets(range) {
 
     const title = svgElement("title");
     const resetNote = weeklyResetNote(event.type);
-    title.textContent = `${label} - ${event.localTime} - ${event.source} classification - Codex weekly usage before reset ${event.previousWeeklyPercent}% - reset credits ${event.previousResetCredits ?? "unknown"} to ${event.currentResetCredits ?? "unknown"}${event.estimatedResetCreditUsed ? " - counts toward estimated reset-credit use" : ""}${resetNote ? " - " + resetNote : ""}`;
+    title.textContent = `${label} - ${event.localTime} - ${event.source} classification - Codex + Work weekly usage before reset ${event.previousWeeklyPercent}% - reset credits ${event.previousResetCredits ?? "unknown"} to ${event.currentResetCredits ?? "unknown"}${event.estimatedResetCreditUsed ? " - counts toward estimated reset-credit use" : ""}${resetNote ? " - " + resetNote : ""}`;
     const text = svgElement("text", {
       class: "weekly-reset-label",
       x: x.toFixed(2),
@@ -2541,7 +2541,7 @@ render();
         f'<text x="{expiry_x}" y="{reset_summary_y + 21}" '
         'font-family="system-ui, -apple-system, sans-serif" '
         'font-size="11" fill="#334155">'
-        f'Codex 5-hour: {html.escape(natural_reset_summary["fiveHour"])}</text>'
+        f'Codex + Work 5-hour: {html.escape(natural_reset_summary["fiveHour"])}</text>'
     )
     if natural_reset_summary["fiveHourNote"]:
         parts.append(
@@ -2554,7 +2554,7 @@ render();
         f'<text x="{expiry_x}" y="{reset_summary_y + 55}" '
         'font-family="system-ui, -apple-system, sans-serif" '
         'font-size="11" fill="#334155">'
-        f'Codex weekly: {html.escape(natural_reset_summary["weekly"])}</text>'
+        f'Codex + Work weekly: {html.escape(natural_reset_summary["weekly"])}</text>'
     )
     expiry_y = reset_top
     parts.append(
@@ -2791,7 +2791,7 @@ def render_html() -> None:
   </style>
 </head>
 <body>
-  <iframe id="graph-frame" src="usage.svg" title="Codex usage graph"></iframe>
+  <iframe id="graph-frame" src="usage.svg" title="Codex and Work usage graph"></iframe>
   <div id="status"></div>
   <script>
     const refreshSeconds = {HTML_REFRESH_SECONDS};

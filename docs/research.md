@@ -2,6 +2,32 @@
 
 Date: 2026-05-19
 
+## 2026-07-09 ChatGPT Desktop Compatibility Audit
+
+- OpenAI moved Codex into the ChatGPT desktop app while stating that existing
+  Codex app users keep their projects, settings, and workflows.
+- The local app remains architecturally continuous with Codex: the bundle ID is
+  still `com.openai.codex`, the URL scheme is still `codex`, local Chromium data
+  remains under `~/Library/Application Support/Codex`, and the app still runs a
+  bundled `codex app-server` process.
+- The installed ChatGPT app is `26.707.30751` and bundles
+  `codex-cli 0.144.0-alpha.4`. The separately installed Homebrew CLI was still
+  `0.142.5`, so Codex Meter now uses the app-bundled binary as its single
+  supported collection path.
+- Live `account/rateLimits/read` responses still expose `codex` and
+  `codex_bengalfox`. The main `codex` bucket is the combined Codex + Work quota;
+  the response does not attribute usage to either mode.
+- During the rollout, the service intermittently returned placeholder windows
+  with `usedPercent: 0` and a later `resetsAt`, then restored the prior usage and
+  reset timestamp on the next sample. Those reversions are data glitches, not
+  hard resets.
+- App-server `0.144` adds detailed reset-credit rows under
+  `rateLimitResetCredits.credits`, including reset type and expiration, and adds
+  `account/usage/read` for account-level token summaries and daily buckets.
+- No newly created Work rollout transcript was present during this audit, so
+  Work-specific ThreadMonitor classification remains an evidence-gathering
+  task rather than an assumed schema change.
+
 ## Findings
 
 - Official personal surface: OpenAI documents current limits in the Codex
@@ -44,6 +70,12 @@ Date: 2026-05-19
   https://github.com/openai/codex/blob/main/codex-rs/app-server/README.md
 - OpenAI App Server engineering post:
   https://openai.com/index/unlocking-the-codex-harness/
+- OpenAI Codex changelog, 2026-07-09:
+  https://learn.chatgpt.com/docs/changelog
+- OpenAI ChatGPT Work guide:
+  https://learn.chatgpt.com/docs/get-started-with-work
+- OpenAI Codex App Server reference:
+  https://learn.chatgpt.com/docs/app-server
 - CodexBar:
   https://github.com/steipete/CodexBar
 - CodexIsland:
@@ -56,4 +88,3 @@ Date: 2026-05-19
   https://github.com/ofilis/codex-ha-bridge
 - codex-blackbox:
   https://github.com/softcane/codex-blackbox
-
