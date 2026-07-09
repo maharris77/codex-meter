@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+import copy
 import html
 import json
 import select
@@ -27,6 +28,8 @@ READ_TIMEOUT_SECONDS = 30
 CODEX_BIN = "/opt/homebrew/bin/codex"
 PROJECT_VERSION = "0.6.0"
 RESET_TIME_TOLERANCE_SECONDS = 10 * 60
+RESET_TIMESTAMP_JITTER_SECONDS = 15
+EARLY_RESET_CONFIRMING_SAMPLES = 2
 RESET_CREDIT_EXPIRATION_DAYS = 30
 RESET_CREDIT_BANKING_INTRO_EPOCH = int(
     datetime(2026, 6, 11, tzinfo=timezone.utc).timestamp()
@@ -612,6 +615,189 @@ def _epoch(value: Any) -> int | None:
     return None
 
 
+def _limit_window(
+    snapshot: dict[str, Any],
+    limit_id: str,
+    window_name: str,
+) -> dict[str, Any] | None:
+    limit = limit_snapshots(snapshot["result"]).get(limit_id)
+    if not isinstance(limit, dict):
+        return None
+    window = limit.get(window_name)
+    if not isinstance(window, dict):
+        return None
+    return window
+
+
+def _early_reset_is_confirmed(
+    snapshots: list[dict[str, Any]],
+    invalid: set[tuple[int, str, str]],
+    index: int,
+    limit_id: str,
+    window_name: str,
+    reset_at: int,
+) -> bool:
+    confirmations = 0
+    for future_index in range(index + 1, len(snapshots)):
+        future_window = _limit_window(
+            snapshots[future_index], limit_id, window_name
+        )
+        if future_window is None:
+            continue
+        if (future_index, limit_id, window_name) in invalid:
+            return False
+        future_reset = _epoch(future_window.get("resetsAt"))
+        if (
+            future_reset is None
+            or abs(future_reset - reset_at) > RESET_TIMESTAMP_JITTER_SECONDS
+        ):
+            return False
+        confirmations += 1
+        if confirmations >= EARLY_RESET_CONFIRMING_SAMPLES:
+            return True
+    return False
+
+
+def invalid_limit_window_samples(
+    snapshots: list[dict[str, Any]],
+) -> set[tuple[int, str, str]]:
+    invalid: set[tuple[int, str, str]] = set()
+    future_min_reset: dict[tuple[str, str], int] = {}
+
+    # A real next-reset timestamp cannot later move materially backward. Keep
+    # the raw snapshot, but exclude any contradicted window from the display.
+    for index in range(len(snapshots) - 1, -1, -1):
+        for limit_id, limit in limit_snapshots(
+            snapshots[index]["result"]
+        ).items():
+            for window_name in ("primary", "secondary"):
+                window = limit.get(window_name)
+                if not isinstance(window, dict):
+                    continue
+                reset_at = _epoch(window.get("resetsAt"))
+                if reset_at is None:
+                    continue
+                key = (limit_id, window_name)
+                future_reset = future_min_reset.get(key)
+                if (
+                    future_reset is not None
+                    and reset_at
+                    > future_reset + RESET_TIMESTAMP_JITTER_SECONDS
+                ):
+                    invalid.add((index, limit_id, window_name))
+                    continue
+                future_min_reset[key] = (
+                    reset_at
+                    if future_reset is None
+                    else min(reset_at, future_reset)
+                )
+
+    last_valid_index: dict[tuple[str, str], int] = {}
+    for index, snapshot in enumerate(snapshots):
+        current_collected = _epoch(snapshot.get("collectedAtEpoch"))
+        for limit_id, limit in limit_snapshots(snapshot["result"]).items():
+            for window_name in ("primary", "secondary"):
+                sample_key = (index, limit_id, window_name)
+                if sample_key in invalid:
+                    continue
+                current_window = limit.get(window_name)
+                if not isinstance(current_window, dict):
+                    continue
+                key = (limit_id, window_name)
+                previous_index = last_valid_index.get(key)
+                if previous_index is None:
+                    last_valid_index[key] = index
+                    continue
+                previous_window = _limit_window(
+                    snapshots[previous_index], limit_id, window_name
+                )
+                if previous_window is None:
+                    last_valid_index[key] = index
+                    continue
+
+                previous_reset = _epoch(previous_window.get("resetsAt"))
+                current_reset = _epoch(current_window.get("resetsAt"))
+                previous_used = _number(previous_window.get("usedPercent"))
+                current_used = _number(current_window.get("usedPercent"))
+                if (
+                    previous_reset is None
+                    or current_reset is None
+                    or current_collected is None
+                    or previous_used is None
+                    or current_used is None
+                ):
+                    last_valid_index[key] = index
+                    continue
+
+                early_reset_candidate = (
+                    current_reset
+                    > previous_reset + RESET_TIMESTAMP_JITTER_SECONDS
+                    and current_used < previous_used
+                    and current_collected + RESET_TIME_TOLERANCE_SECONDS
+                    < previous_reset
+                )
+                if not early_reset_candidate:
+                    last_valid_index[key] = index
+                    continue
+
+                previous_count = reset_credit_count(snapshots[previous_index])
+                current_count = reset_credit_count(snapshot)
+                manual_codex_reset = (
+                    limit_id == "codex"
+                    and previous_count is not None
+                    and current_count is not None
+                    and current_count < previous_count
+                )
+                if manual_codex_reset or _early_reset_is_confirmed(
+                    snapshots,
+                    invalid,
+                    index,
+                    limit_id,
+                    window_name,
+                    current_reset,
+                ):
+                    last_valid_index[key] = index
+                    continue
+                invalid.add(sample_key)
+
+    return invalid
+
+
+def validated_usage_snapshots(
+    snapshots: list[dict[str, Any]],
+) -> list[dict[str, Any]]:
+    invalid = invalid_limit_window_samples(snapshots)
+    last_valid_window: dict[tuple[str, str], dict[str, Any]] = {}
+    validated: list[dict[str, Any]] = []
+
+    for index, snapshot in enumerate(snapshots):
+        rendered_snapshot = snapshot
+        for limit_id, limit in limit_snapshots(snapshot["result"]).items():
+            for window_name in ("primary", "secondary"):
+                window = limit.get(window_name)
+                if not isinstance(window, dict):
+                    continue
+                key = (limit_id, window_name)
+                if (index, limit_id, window_name) not in invalid:
+                    last_valid_window[key] = window
+                    continue
+                replacement = last_valid_window.get(key)
+                if replacement is None:
+                    continue
+                if rendered_snapshot is snapshot:
+                    rendered_snapshot = copy.deepcopy(snapshot)
+                rendered_snapshot["result"]["rateLimitsByLimitId"][limit_id][
+                    window_name
+                ] = replacement
+                if limit_id == "codex":
+                    rendered_snapshot["result"]["rateLimits"][
+                        window_name
+                    ] = replacement
+        validated.append(rendered_snapshot)
+
+    return validated
+
+
 def classify_weekly_reset(
     previous_snapshot: dict[str, Any],
     current_snapshot: dict[str, Any],
@@ -631,7 +817,7 @@ def classify_weekly_reset(
         or current_used is None
     ):
         return None
-    if current_reset <= previous_reset:
+    if current_reset <= previous_reset + RESET_TIMESTAMP_JITTER_SECONDS:
         return None
 
     previous_count = reset_credit_count(previous_snapshot)
@@ -654,16 +840,6 @@ def classify_weekly_reset(
             return "early_unknown"
         return "hard"
     return None
-
-
-def choose_weekly_reset_type(reset_types: list[str]) -> str:
-    if "manual" in reset_types:
-        return "manual"
-    if "hard" in reset_types:
-        return "hard"
-    if "early_unknown" in reset_types:
-        return "early_unknown"
-    return "natural"
 
 
 def classify_missing_credit_era(
@@ -710,44 +886,33 @@ def collect_weekly_reset_events(
         current_limits = limit_snapshots(current_snapshot["result"])
         previous_count = reset_credit_count(previous_snapshot)
         current_count = reset_credit_count(current_snapshot)
-        reset_types: list[str] = []
-        for limit_id, current_limit in sorted(current_limits.items()):
-            previous_limit = previous_limits.get(limit_id)
-            if not previous_limit:
-                continue
-            previous_window = previous_limit.get("secondary")
-            current_window = current_limit.get("secondary")
-            if not previous_window or not current_window:
-                continue
-            reset_type = classify_weekly_reset(
-                previous_snapshot,
-                current_snapshot,
-                previous_window,
-                current_window,
-            )
-            if reset_type is None:
-                continue
-            reset_types.append(reset_type)
-        if not reset_types:
+        previous_limit = previous_limits.get("codex")
+        current_limit = current_limits.get("codex")
+        if not isinstance(previous_limit, dict) or not isinstance(
+            current_limit, dict
+        ):
+            continue
+        previous_window = previous_limit.get("secondary")
+        current_window = current_limit.get("secondary")
+        if not isinstance(previous_window, dict) or not isinstance(
+            current_window, dict
+        ):
+            continue
+        reset_type = classify_weekly_reset(
+            previous_snapshot,
+            current_snapshot,
+            previous_window,
+            current_window,
+        )
+        if reset_type is None:
             continue
         timestamp = int(current_snapshot["collectedAtEpoch"])
-        previous_weekly_values = [
-            _number((limit_snapshot.get("secondary") or {}).get("usedPercent"))
-            for limit_snapshot in previous_limits.values()
-        ]
-        known_previous_weekly_values = [
-            value for value in previous_weekly_values if value is not None
-        ]
-        previous_weekly_max = (
-            max(known_previous_weekly_values)
-            if known_previous_weekly_values
-            else 0
-        )
         reset_type = classify_missing_credit_era(
-            choose_weekly_reset_type(reset_types),
+            reset_type,
             timestamp,
             observed_post_banking_hard_reset,
         )
+        previous_weekly_percent = _number(previous_window.get("usedPercent"))
         events.append(
             {
                 "timestamp": timestamp,
@@ -756,7 +921,7 @@ def collect_weekly_reset_events(
                 "source": reset_type_source(reset_type),
                 "estimatedResetCreditUsed": reset_type
                 in ("manual", "inferred_manual"),
-                "previousWeeklyMaxPercent": previous_weekly_max,
+                "previousWeeklyPercent": previous_weekly_percent or 0,
                 "previousResetCredits": previous_count,
                 "currentResetCredits": current_count,
             }
@@ -861,8 +1026,11 @@ def render_svg(snapshots: list[dict[str, Any]]) -> None:
         "1 4",
         "8 2 2 2 2 2",
     ]
+    usage_snapshots = validated_usage_snapshots(snapshots)
     series_data: list[dict[str, Any]] = []
-    for index, (label, points) in enumerate(sorted(collect_series(snapshots).items())):
+    for index, (label, points) in enumerate(
+        sorted(collect_series(usage_snapshots).items())
+    ):
         series_data.append(
             {
                 "label": label,
@@ -889,8 +1057,8 @@ def render_svg(snapshots: list[dict[str, Any]]) -> None:
         if reset_credit_expiration_anchors
         else []
     )
-    natural_reset_summary = codex_natural_reset_summary(snapshots[-1])
-    weekly_reset_events = collect_weekly_reset_events(snapshots)
+    natural_reset_summary = codex_natural_reset_summary(usage_snapshots[-1])
+    weekly_reset_events = collect_weekly_reset_events(usage_snapshots)
     reset_credit_estimate = reset_credit_use_estimate(weekly_reset_events)
     reset_credit_max_count = max(
         [1] + [int(point["count"]) for point in reset_credit_points]
@@ -1571,7 +1739,7 @@ function renderWeeklyResets(range) {
       x = pointX - labelWidth - 8;
     }
     x = Math.max(usageData.left + 4, Math.min(x, plotRight - labelWidth - 4));
-    let y = yPosition(Number(event.previousWeeklyMaxPercent ?? event.previousPercent ?? event.currentPercent ?? 0)) - 8;
+    let y = yPosition(Number(event.previousWeeklyPercent ?? event.previousPercent ?? event.currentPercent ?? 0)) - 8;
     y = Math.max(usageData.top + 14, Math.min(y, usageData.top + usageData.plotHeight - 6));
     let box = { x, y: y - labelHeight + 3, width: labelWidth, height: labelHeight };
     while (placedLabels.some((placed) => labelBoxOverlaps(box, placed))) {
@@ -1585,7 +1753,7 @@ function renderWeeklyResets(range) {
 
     const title = svgElement("title");
     const resetNote = weeklyResetNote(event.type);
-    title.textContent = `${label} - ${event.localTime} - ${event.source} classification - max weekly usage before reset ${event.previousWeeklyMaxPercent}% - reset credits ${event.previousResetCredits ?? "unknown"} to ${event.currentResetCredits ?? "unknown"}${event.estimatedResetCreditUsed ? " - counts toward estimated reset-credit use" : ""}${resetNote ? " - " + resetNote : ""}`;
+    title.textContent = `${label} - ${event.localTime} - ${event.source} classification - Codex weekly usage before reset ${event.previousWeeklyPercent}% - reset credits ${event.previousResetCredits ?? "unknown"} to ${event.currentResetCredits ?? "unknown"}${event.estimatedResetCreditUsed ? " - counts toward estimated reset-credit use" : ""}${resetNote ? " - " + resetNote : ""}`;
     const text = svgElement("text", {
       class: "weekly-reset-label",
       x: x.toFixed(2),
