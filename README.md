@@ -206,6 +206,8 @@ python3 scripts/install_launch_agent.py 1 hour
 Supported units are `minutes`, `hours`, and `days`.
 The LaunchAgent keeps one app-server session open between samples,
 instead of reinitializing Codex's local databases on every interval.
+After updating an existing installation, run the installer again to replace the
+older per-sample LaunchAgent with the persistent collector.
 
 If you used the old `codex-usage-tracker` name, the installer migrates existing
 snapshots from `~/Documents/Archives/Codex Usage Tracker/` into
