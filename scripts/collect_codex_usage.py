@@ -3,14 +3,16 @@
 
 from __future__ import annotations
 
+import argparse
 import copy
 import html
 import json
 import select
+import signal
 import subprocess
 import sys
 import time
-from collections import defaultdict
+from collections import defaultdict, deque
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
@@ -24,7 +26,8 @@ HTML_PATH = OUTPUT_DIR / "usage.html"
 RESET_CREDIT_EVENTS_PATH = OUTPUT_DIR / "reset_credit_events.jsonl"
 FLEXIBLE_CREDIT_EVENTS_PATH = OUTPUT_DIR / "flexible_credit_events.jsonl"
 SETTINGS_PATH = OUTPUT_DIR / "settings.json"
-READ_TIMEOUT_SECONDS = 30
+APP_SERVER_INITIALIZE_TIMEOUT_SECONDS = 120
+RATE_LIMIT_READ_TIMEOUT_SECONDS = 30
 CODEX_BIN = "/opt/homebrew/bin/codex"
 PROJECT_VERSION = "0.6.1"
 RESET_TIME_TOLERANCE_SECONDS = 10 * 60
@@ -128,15 +131,16 @@ def write_message(process: subprocess.Popen[str], message: dict[str, Any]) -> No
 def read_response(
     process: subprocess.Popen[str],
     request_id: int,
-    tail: list[str],
+    tail: deque[str],
+    timeout_seconds: int,
 ) -> dict[str, Any]:
     if process.stdout is None:
         raise RuntimeError("codex app-server stdout is closed")
 
-    deadline = time.monotonic() + READ_TIMEOUT_SECONDS
+    deadline = time.monotonic() + timeout_seconds
     while time.monotonic() < deadline:
         if process.poll() is not None:
-            detail = "\n".join(tail[-10:])
+            detail = "\n".join(tail)
             raise RuntimeError(
                 f"codex app-server exited before response {request_id}; "
                 f"exit code {process.returncode}\n{detail}"
@@ -163,31 +167,33 @@ def read_response(
             raise RuntimeError(json.dumps(payload["error"], indent=2, sort_keys=True))
         if "result" not in payload:
             raise RuntimeError(f"response {request_id} had no result")
+        tail.clear()
         return payload
 
-    detail = "\n".join(tail[-10:])
+    detail = "\n".join(tail)
     raise RuntimeError(
         f"timed out waiting for codex app-server response {request_id}\n{detail}"
     )
 
 
-def read_codex_rate_limits() -> dict[str, Any]:
-    process = subprocess.Popen(
-        [CODEX_BIN, "app-server", "--listen", "stdio://"],
-        stdin=subprocess.PIPE,
-        stdout=subprocess.PIPE,
-        stderr=subprocess.STDOUT,
-        text=True,
-        bufsize=1,
-    )
-    tail: list[str] = []
-    try:
-        write_message(
-            process,
-            {
-                "id": 1,
-                "method": "initialize",
-                "params": {
+class CodexAppServerClient:
+    """Keep one app-server process alive for repeated quota reads."""
+
+    def __init__(self) -> None:
+        self.process = subprocess.Popen(
+            [CODEX_BIN, "app-server", "--listen", "stdio://"],
+            stdin=subprocess.PIPE,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+            text=True,
+            bufsize=1,
+        )
+        self.tail: deque[str] = deque(maxlen=10)
+        self.next_request_id = 1
+        try:
+            self._request(
+                "initialize",
+                {
                     "clientInfo": {
                         "name": "codex-meter",
                         "title": "Codex Meter",
@@ -195,25 +201,55 @@ def read_codex_rate_limits() -> dict[str, Any]:
                     },
                     "capabilities": {"experimentalApi": True},
                 },
-            },
-        )
-        read_response(process, 1, tail)
-        write_message(process, {"method": "initialized"})
+                APP_SERVER_INITIALIZE_TIMEOUT_SECONDS,
+            )
+            write_message(self.process, {"method": "initialized"})
+        except BaseException:
+            self.close()
+            raise
+
+    def _request(
+        self,
+        method: str,
+        params: dict[str, Any] | None,
+        timeout_seconds: int,
+    ) -> dict[str, Any]:
+        request_id = self.next_request_id
+        self.next_request_id += 1
         write_message(
-            process,
-            {"id": 2, "method": "account/rateLimits/read", "params": None},
+            self.process,
+            {"id": request_id, "method": method, "params": params},
         )
-        return read_response(process, 2, tail)["result"]
-    finally:
-        if process.stdin is not None:
-            process.stdin.close()
-        if process.poll() is None:
-            process.terminate()
+        return read_response(
+            self.process,
+            request_id,
+            self.tail,
+            timeout_seconds,
+        )["result"]
+
+    def read_rate_limits(self) -> dict[str, Any]:
+        return self._request(
+            "account/rateLimits/read",
+            None,
+            RATE_LIMIT_READ_TIMEOUT_SECONDS,
+        )
+
+    def close(self) -> None:
+        if self.process.stdin is not None and not self.process.stdin.closed:
+            self.process.stdin.close()
+        if self.process.poll() is None:
+            self.process.terminate()
             try:
-                process.wait(timeout=3)
+                self.process.wait(timeout=3)
             except subprocess.TimeoutExpired:
-                process.kill()
-                process.wait(timeout=3)
+                self.process.kill()
+                self.process.wait(timeout=3)
+
+    def __enter__(self) -> CodexAppServerClient:
+        return self
+
+    def __exit__(self, *_args: object) -> None:
+        self.close()
 
 
 def snapshot_limits(result: dict[str, Any]) -> dict[str, Any]:
@@ -2805,17 +2841,60 @@ def summary_lines(result: dict[str, Any]) -> list[str]:
     return lines
 
 
-def main() -> None:
+def collect_and_render(client: CodexAppServerClient) -> dict[str, Any]:
     previous_snapshot = load_latest_snapshot()
-    result = read_codex_rate_limits()
+    result = client.read_rate_limits()
     snapshot = snapshot_limits(result)
     append_snapshot(snapshot)
     alert_if_reset_credit_count_changed(previous_snapshot, snapshot)
     record_if_flexible_credit_changed(previous_snapshot, snapshot)
     render_svg(load_snapshots())
     render_html()
+    return result
 
-    if sys.stdout.isatty():
+
+def positive_interval_seconds(value: str) -> int:
+    try:
+        interval_seconds = int(value)
+    except ValueError as exc:
+        raise argparse.ArgumentTypeError(
+            "interval must be a positive integer"
+        ) from exc
+    if interval_seconds < 1:
+        raise argparse.ArgumentTypeError("interval must be a positive integer")
+    return interval_seconds
+
+
+def parse_arguments(arguments: list[str]) -> argparse.Namespace:
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument(
+        "--interval-seconds",
+        type=positive_interval_seconds,
+        help="keep running and collect at this interval",
+    )
+    return parser.parse_args(arguments)
+
+
+def stop_on_sigterm(_signum: int, _frame: object) -> None:
+    raise SystemExit(0)
+
+
+def main() -> None:
+    arguments = parse_arguments(sys.argv[1:])
+    signal.signal(signal.SIGTERM, stop_on_sigterm)
+
+    with CodexAppServerClient() as client:
+        if arguments.interval_seconds is None:
+            result = collect_and_render(client)
+        else:
+            while True:
+                cycle_started = time.monotonic()
+                collect_and_render(client)
+                elapsed = time.monotonic() - cycle_started
+                delay = arguments.interval_seconds - elapsed
+                time.sleep(delay if delay > 0 else arguments.interval_seconds)
+
+    if arguments.interval_seconds is None and sys.stdout.isatty():
         print(f"Wrote {SNAPSHOTS_PATH}")
         print(f"Wrote {LATEST_PATH}")
         print(f"Wrote {SVG_PATH}")

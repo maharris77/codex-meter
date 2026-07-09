@@ -1,8 +1,11 @@
 from __future__ import annotations
 
+import io
+import json
 import sys
 import unittest
 from pathlib import Path
+from unittest import mock
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "scripts"))
@@ -165,6 +168,50 @@ class UsageSnapshotValidationTests(unittest.TestCase):
         validated = meter.validated_usage_snapshots(snapshots)
 
         self.assertEqual(meter.collect_weekly_reset_events(validated), [])
+
+
+class CodexAppServerClientTests(unittest.TestCase):
+    def test_reuses_one_process_for_multiple_rate_limit_reads(self) -> None:
+        process = mock.Mock()
+        process.stdin = io.StringIO()
+        process.stdout = io.StringIO()
+        process.poll.return_value = 0
+        responses = [
+            {"result": {"server": "ready"}},
+            {"result": {"sample": 1}},
+            {"result": {"sample": 2}},
+        ]
+
+        with (
+            mock.patch.object(
+                meter.subprocess,
+                "Popen",
+                return_value=process,
+            ) as popen,
+            mock.patch.object(meter, "read_response", side_effect=responses),
+        ):
+            with meter.CodexAppServerClient() as client:
+                self.assertEqual(client.read_rate_limits(), {"sample": 1})
+                self.assertEqual(client.read_rate_limits(), {"sample": 2})
+                request_lines = [
+                    json.loads(line)
+                    for line in process.stdin.getvalue().splitlines()
+                ]
+
+        popen.assert_called_once()
+        self.assertEqual(
+            [line.get("method") for line in request_lines],
+            [
+                "initialize",
+                "initialized",
+                "account/rateLimits/read",
+                "account/rateLimits/read",
+            ],
+        )
+        self.assertEqual(
+            [line.get("id") for line in request_lines if "id" in line],
+            [1, 2, 3],
+        )
 
 
 if __name__ == "__main__":
