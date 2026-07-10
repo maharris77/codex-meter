@@ -1918,10 +1918,10 @@ function renderCurrentValueLabels(layer, labels) {
       "stroke-width": 3,
       "paint-order": "stroke fill"
     });
-    const percentText = label.point.percentText || formatPercent(label.point.percent);
+    const percentText = formatPercent(label.point.percent);
     text.textContent = percentText;
     const title = svgElement("title");
-    title.textContent = `Current ${label.series.label} - ${label.point.localTime} - ${percentText} used`;
+    title.textContent = `Current ${label.series.label} - ${formatDate(label.point.timestamp)} - ${percentText} used`;
     text.appendChild(title);
     layer.appendChild(text);
   }
