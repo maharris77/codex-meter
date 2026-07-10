@@ -12,7 +12,7 @@ import install_launch_agent as installer
 
 class LaunchAgentTests(unittest.TestCase):
     def test_persistent_collector_receives_sampling_interval(self) -> None:
-        plist = installer.build_plist(300)
+        plist = installer.build_plist(30)
 
         self.assertEqual(
             plist["ProgramArguments"],
@@ -20,7 +20,7 @@ class LaunchAgentTests(unittest.TestCase):
                 installer.PYTHON_BIN,
                 str(installer.COLLECTOR),
                 "--interval-seconds",
-                "300",
+                "30",
             ],
         )
         self.assertTrue(plist["KeepAlive"])
