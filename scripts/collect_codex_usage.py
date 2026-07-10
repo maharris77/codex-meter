@@ -3,13 +3,19 @@
 
 from __future__ import annotations
 
+import argparse
+import base64
+import copy
+import gzip
 import html
 import json
 import select
+import signal
 import subprocess
 import sys
+import tempfile
 import time
-from collections import defaultdict
+from collections import defaultdict, deque
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
@@ -23,16 +29,28 @@ HTML_PATH = OUTPUT_DIR / "usage.html"
 RESET_CREDIT_EVENTS_PATH = OUTPUT_DIR / "reset_credit_events.jsonl"
 FLEXIBLE_CREDIT_EVENTS_PATH = OUTPUT_DIR / "flexible_credit_events.jsonl"
 SETTINGS_PATH = OUTPUT_DIR / "settings.json"
-READ_TIMEOUT_SECONDS = 30
-CODEX_BIN = "/opt/homebrew/bin/codex"
-PROJECT_VERSION = "0.6.0"
+APP_SERVER_INITIALIZE_TIMEOUT_SECONDS = 120
+RATE_LIMIT_READ_TIMEOUT_SECONDS = 30
+CODEX_BIN = "/Applications/ChatGPT.app/Contents/Resources/codex"
+PROJECT_VERSION = "0.7.0"
 RESET_TIME_TOLERANCE_SECONDS = 10 * 60
+RESET_TIMESTAMP_JITTER_SECONDS = 15
+EARLY_RESET_CONFIRMING_SAMPLES = 2
 RESET_CREDIT_EXPIRATION_DAYS = 30
 RESET_CREDIT_BANKING_INTRO_EPOCH = int(
     datetime(2026, 6, 11, tzinfo=timezone.utc).timestamp()
 )
 RESET_CREDIT_BANKING_INTRO_LABEL = "2026-06-11"
 HTML_REFRESH_SECONDS = 30
+SVG_BROWSER_BYTE_LIMIT = 1024 * 1024
+SVG_DATA_MAX_ENCODED_CHARACTERS = 700 * 1024
+DISPLAY_FULL_RESOLUTION_SECONDS = 5 * 60 * 60
+DISPLAY_RESOLUTION_TIERS = (
+    (7 * 24 * 60 * 60, 2 * 60),
+    (30 * 24 * 60 * 60, 15 * 60),
+    (365 * 24 * 60 * 60, 2 * 60 * 60),
+    (None, 24 * 60 * 60),
+)
 DEFAULT_VIEW_PRESET = "seven_days"
 VIEW_PRESETS = (
     "five_hours",
@@ -125,15 +143,16 @@ def write_message(process: subprocess.Popen[str], message: dict[str, Any]) -> No
 def read_response(
     process: subprocess.Popen[str],
     request_id: int,
-    tail: list[str],
+    tail: deque[str],
+    timeout_seconds: int,
 ) -> dict[str, Any]:
     if process.stdout is None:
         raise RuntimeError("codex app-server stdout is closed")
 
-    deadline = time.monotonic() + READ_TIMEOUT_SECONDS
+    deadline = time.monotonic() + timeout_seconds
     while time.monotonic() < deadline:
         if process.poll() is not None:
-            detail = "\n".join(tail[-10:])
+            detail = "\n".join(tail)
             raise RuntimeError(
                 f"codex app-server exited before response {request_id}; "
                 f"exit code {process.returncode}\n{detail}"
@@ -160,31 +179,33 @@ def read_response(
             raise RuntimeError(json.dumps(payload["error"], indent=2, sort_keys=True))
         if "result" not in payload:
             raise RuntimeError(f"response {request_id} had no result")
+        tail.clear()
         return payload
 
-    detail = "\n".join(tail[-10:])
+    detail = "\n".join(tail)
     raise RuntimeError(
         f"timed out waiting for codex app-server response {request_id}\n{detail}"
     )
 
 
-def read_codex_rate_limits() -> dict[str, Any]:
-    process = subprocess.Popen(
-        [CODEX_BIN, "app-server", "--listen", "stdio://"],
-        stdin=subprocess.PIPE,
-        stdout=subprocess.PIPE,
-        stderr=subprocess.STDOUT,
-        text=True,
-        bufsize=1,
-    )
-    tail: list[str] = []
-    try:
-        write_message(
-            process,
-            {
-                "id": 1,
-                "method": "initialize",
-                "params": {
+class CodexAppServerClient:
+    """Keep one app-server process alive for repeated quota reads."""
+
+    def __init__(self) -> None:
+        self.process = subprocess.Popen(
+            [CODEX_BIN, "app-server", "--listen", "stdio://"],
+            stdin=subprocess.PIPE,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+            text=True,
+            bufsize=1,
+        )
+        self.tail: deque[str] = deque(maxlen=10)
+        self.next_request_id = 1
+        try:
+            self._request(
+                "initialize",
+                {
                     "clientInfo": {
                         "name": "codex-meter",
                         "title": "Codex Meter",
@@ -192,25 +213,55 @@ def read_codex_rate_limits() -> dict[str, Any]:
                     },
                     "capabilities": {"experimentalApi": True},
                 },
-            },
-        )
-        read_response(process, 1, tail)
-        write_message(process, {"method": "initialized"})
+                APP_SERVER_INITIALIZE_TIMEOUT_SECONDS,
+            )
+            write_message(self.process, {"method": "initialized"})
+        except BaseException:
+            self.close()
+            raise
+
+    def _request(
+        self,
+        method: str,
+        params: dict[str, Any] | None,
+        timeout_seconds: int,
+    ) -> dict[str, Any]:
+        request_id = self.next_request_id
+        self.next_request_id += 1
         write_message(
-            process,
-            {"id": 2, "method": "account/rateLimits/read", "params": None},
+            self.process,
+            {"id": request_id, "method": method, "params": params},
         )
-        return read_response(process, 2, tail)["result"]
-    finally:
-        if process.stdin is not None:
-            process.stdin.close()
-        if process.poll() is None:
-            process.terminate()
+        return read_response(
+            self.process,
+            request_id,
+            self.tail,
+            timeout_seconds,
+        )["result"]
+
+    def read_rate_limits(self) -> dict[str, Any]:
+        return self._request(
+            "account/rateLimits/read",
+            None,
+            RATE_LIMIT_READ_TIMEOUT_SECONDS,
+        )
+
+    def close(self) -> None:
+        if self.process.stdin is not None and not self.process.stdin.closed:
+            self.process.stdin.close()
+        if self.process.poll() is None:
+            self.process.terminate()
             try:
-                process.wait(timeout=3)
+                self.process.wait(timeout=3)
             except subprocess.TimeoutExpired:
-                process.kill()
-                process.wait(timeout=3)
+                self.process.kill()
+                self.process.wait(timeout=3)
+
+    def __enter__(self) -> CodexAppServerClient:
+        return self
+
+    def __exit__(self, *_args: object) -> None:
+        self.close()
 
 
 def snapshot_limits(result: dict[str, Any]) -> dict[str, Any]:
@@ -228,7 +279,32 @@ def append_snapshot(snapshot: dict[str, Any]) -> None:
     with SNAPSHOTS_PATH.open("a", encoding="utf-8") as handle:
         handle.write(json.dumps(snapshot, separators=(",", ":"), sort_keys=True))
         handle.write("\n")
-    LATEST_PATH.write_text(json.dumps(snapshot, indent=2, sort_keys=True), "utf-8")
+    atomic_write_text(
+        LATEST_PATH,
+        json.dumps(snapshot, indent=2, sort_keys=True),
+    )
+
+
+def atomic_write_text(path: Path, content: str) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    existing_mode = path.stat().st_mode & 0o777 if path.exists() else None
+    temporary_path: Path | None = None
+    try:
+        with tempfile.NamedTemporaryFile(
+            mode="w",
+            encoding="utf-8",
+            dir=path.parent,
+            prefix=f".{path.name}.",
+            suffix=".tmp",
+            delete=False,
+        ) as handle:
+            temporary_path = Path(handle.name)
+            handle.write(content)
+        temporary_path.chmod(existing_mode if existing_mode is not None else 0o644)
+        temporary_path.replace(path)
+    finally:
+        if temporary_path is not None:
+            temporary_path.unlink(missing_ok=True)
 
 
 def load_settings() -> dict[str, Any]:
@@ -436,11 +512,11 @@ def window_label(window_name: str, window: dict[str, Any]) -> str:
 
 
 def display_limit_name(limit_id: str, limit_snapshot: dict[str, Any]) -> str:
+    if limit_id == "codex":
+        return "Codex + Work"
     limit_name = limit_snapshot.get("limitName")
     if isinstance(limit_name, str) and limit_name:
         return limit_name
-    if limit_id == "codex":
-        return "Codex"
     return limit_id
 
 
@@ -471,6 +547,51 @@ def collect_series(
                     label = series_label(limit_id, limit_snapshot, window_name, window)
                     series[label].append((collected_at, float(used_percent)))
     return dict(series)
+
+
+def thin_display_points(
+    points: list[tuple[int, float]],
+    latest_timestamp: int,
+    resolution_scale: int = 1,
+) -> list[tuple[int, float]]:
+    thinned: list[tuple[int, float]] = []
+    bucket: list[tuple[int, float]] = []
+    bucket_key: tuple[int, int] | None = None
+
+    def flush_bucket() -> None:
+        if not bucket:
+            return
+        candidates = {
+            0,
+            len(bucket) - 1,
+            min(range(len(bucket)), key=lambda index: bucket[index][1]),
+            max(range(len(bucket)), key=lambda index: bucket[index][1]),
+        }
+        thinned.extend(bucket[index] for index in sorted(candidates))
+        bucket.clear()
+
+    for point in points:
+        timestamp = point[0]
+        age_seconds = max(0, latest_timestamp - timestamp)
+        if age_seconds <= DISPLAY_FULL_RESOLUTION_SECONDS:
+            flush_bucket()
+            bucket_key = None
+            thinned.append(point)
+            continue
+
+        bucket_seconds = next(
+            resolution * resolution_scale
+            for maximum_age, resolution in DISPLAY_RESOLUTION_TIERS
+            if maximum_age is None or age_seconds <= maximum_age
+        )
+        point_bucket_key = (bucket_seconds, timestamp // bucket_seconds)
+        if point_bucket_key != bucket_key:
+            flush_bucket()
+            bucket_key = point_bucket_key
+        bucket.append(point)
+
+    flush_bucket()
+    return thinned
 
 
 def collect_reset_credit_points(snapshots: list[dict[str, Any]]) -> list[dict[str, Any]]:
@@ -612,6 +733,189 @@ def _epoch(value: Any) -> int | None:
     return None
 
 
+def _limit_window(
+    snapshot: dict[str, Any],
+    limit_id: str,
+    window_name: str,
+) -> dict[str, Any] | None:
+    limit = limit_snapshots(snapshot["result"]).get(limit_id)
+    if not isinstance(limit, dict):
+        return None
+    window = limit.get(window_name)
+    if not isinstance(window, dict):
+        return None
+    return window
+
+
+def _early_reset_is_confirmed(
+    snapshots: list[dict[str, Any]],
+    invalid: set[tuple[int, str, str]],
+    index: int,
+    limit_id: str,
+    window_name: str,
+    reset_at: int,
+) -> bool:
+    confirmations = 0
+    for future_index in range(index + 1, len(snapshots)):
+        future_window = _limit_window(
+            snapshots[future_index], limit_id, window_name
+        )
+        if future_window is None:
+            continue
+        if (future_index, limit_id, window_name) in invalid:
+            return False
+        future_reset = _epoch(future_window.get("resetsAt"))
+        if (
+            future_reset is None
+            or abs(future_reset - reset_at) > RESET_TIMESTAMP_JITTER_SECONDS
+        ):
+            return False
+        confirmations += 1
+        if confirmations >= EARLY_RESET_CONFIRMING_SAMPLES:
+            return True
+    return False
+
+
+def invalid_limit_window_samples(
+    snapshots: list[dict[str, Any]],
+) -> set[tuple[int, str, str]]:
+    invalid: set[tuple[int, str, str]] = set()
+    future_min_reset: dict[tuple[str, str], int] = {}
+
+    # A real next-reset timestamp cannot later move materially backward. Keep
+    # the raw snapshot, but exclude any contradicted window from the display.
+    for index in range(len(snapshots) - 1, -1, -1):
+        for limit_id, limit in limit_snapshots(
+            snapshots[index]["result"]
+        ).items():
+            for window_name in ("primary", "secondary"):
+                window = limit.get(window_name)
+                if not isinstance(window, dict):
+                    continue
+                reset_at = _epoch(window.get("resetsAt"))
+                if reset_at is None:
+                    continue
+                key = (limit_id, window_name)
+                future_reset = future_min_reset.get(key)
+                if (
+                    future_reset is not None
+                    and reset_at
+                    > future_reset + RESET_TIMESTAMP_JITTER_SECONDS
+                ):
+                    invalid.add((index, limit_id, window_name))
+                    continue
+                future_min_reset[key] = (
+                    reset_at
+                    if future_reset is None
+                    else min(reset_at, future_reset)
+                )
+
+    last_valid_index: dict[tuple[str, str], int] = {}
+    for index, snapshot in enumerate(snapshots):
+        current_collected = _epoch(snapshot.get("collectedAtEpoch"))
+        for limit_id, limit in limit_snapshots(snapshot["result"]).items():
+            for window_name in ("primary", "secondary"):
+                sample_key = (index, limit_id, window_name)
+                if sample_key in invalid:
+                    continue
+                current_window = limit.get(window_name)
+                if not isinstance(current_window, dict):
+                    continue
+                key = (limit_id, window_name)
+                previous_index = last_valid_index.get(key)
+                if previous_index is None:
+                    last_valid_index[key] = index
+                    continue
+                previous_window = _limit_window(
+                    snapshots[previous_index], limit_id, window_name
+                )
+                if previous_window is None:
+                    last_valid_index[key] = index
+                    continue
+
+                previous_reset = _epoch(previous_window.get("resetsAt"))
+                current_reset = _epoch(current_window.get("resetsAt"))
+                previous_used = _number(previous_window.get("usedPercent"))
+                current_used = _number(current_window.get("usedPercent"))
+                if (
+                    previous_reset is None
+                    or current_reset is None
+                    or current_collected is None
+                    or previous_used is None
+                    or current_used is None
+                ):
+                    last_valid_index[key] = index
+                    continue
+
+                early_reset_candidate = (
+                    current_reset
+                    > previous_reset + RESET_TIMESTAMP_JITTER_SECONDS
+                    and current_used < previous_used
+                    and current_collected + RESET_TIME_TOLERANCE_SECONDS
+                    < previous_reset
+                )
+                if not early_reset_candidate:
+                    last_valid_index[key] = index
+                    continue
+
+                previous_count = reset_credit_count(snapshots[previous_index])
+                current_count = reset_credit_count(snapshot)
+                manual_codex_reset = (
+                    limit_id == "codex"
+                    and previous_count is not None
+                    and current_count is not None
+                    and current_count < previous_count
+                )
+                if manual_codex_reset or _early_reset_is_confirmed(
+                    snapshots,
+                    invalid,
+                    index,
+                    limit_id,
+                    window_name,
+                    current_reset,
+                ):
+                    last_valid_index[key] = index
+                    continue
+                invalid.add(sample_key)
+
+    return invalid
+
+
+def validated_usage_snapshots(
+    snapshots: list[dict[str, Any]],
+) -> list[dict[str, Any]]:
+    invalid = invalid_limit_window_samples(snapshots)
+    last_valid_window: dict[tuple[str, str], dict[str, Any]] = {}
+    validated: list[dict[str, Any]] = []
+
+    for index, snapshot in enumerate(snapshots):
+        rendered_snapshot = snapshot
+        for limit_id, limit in limit_snapshots(snapshot["result"]).items():
+            for window_name in ("primary", "secondary"):
+                window = limit.get(window_name)
+                if not isinstance(window, dict):
+                    continue
+                key = (limit_id, window_name)
+                if (index, limit_id, window_name) not in invalid:
+                    last_valid_window[key] = window
+                    continue
+                replacement = last_valid_window.get(key)
+                if replacement is None:
+                    continue
+                if rendered_snapshot is snapshot:
+                    rendered_snapshot = copy.deepcopy(snapshot)
+                rendered_snapshot["result"]["rateLimitsByLimitId"][limit_id][
+                    window_name
+                ] = replacement
+                if limit_id == "codex":
+                    rendered_snapshot["result"]["rateLimits"][
+                        window_name
+                    ] = replacement
+        validated.append(rendered_snapshot)
+
+    return validated
+
+
 def classify_weekly_reset(
     previous_snapshot: dict[str, Any],
     current_snapshot: dict[str, Any],
@@ -631,7 +935,7 @@ def classify_weekly_reset(
         or current_used is None
     ):
         return None
-    if current_reset <= previous_reset:
+    if current_reset <= previous_reset + RESET_TIMESTAMP_JITTER_SECONDS:
         return None
 
     previous_count = reset_credit_count(previous_snapshot)
@@ -654,16 +958,6 @@ def classify_weekly_reset(
             return "early_unknown"
         return "hard"
     return None
-
-
-def choose_weekly_reset_type(reset_types: list[str]) -> str:
-    if "manual" in reset_types:
-        return "manual"
-    if "hard" in reset_types:
-        return "hard"
-    if "early_unknown" in reset_types:
-        return "early_unknown"
-    return "natural"
 
 
 def classify_missing_credit_era(
@@ -710,44 +1004,33 @@ def collect_weekly_reset_events(
         current_limits = limit_snapshots(current_snapshot["result"])
         previous_count = reset_credit_count(previous_snapshot)
         current_count = reset_credit_count(current_snapshot)
-        reset_types: list[str] = []
-        for limit_id, current_limit in sorted(current_limits.items()):
-            previous_limit = previous_limits.get(limit_id)
-            if not previous_limit:
-                continue
-            previous_window = previous_limit.get("secondary")
-            current_window = current_limit.get("secondary")
-            if not previous_window or not current_window:
-                continue
-            reset_type = classify_weekly_reset(
-                previous_snapshot,
-                current_snapshot,
-                previous_window,
-                current_window,
-            )
-            if reset_type is None:
-                continue
-            reset_types.append(reset_type)
-        if not reset_types:
+        previous_limit = previous_limits.get("codex")
+        current_limit = current_limits.get("codex")
+        if not isinstance(previous_limit, dict) or not isinstance(
+            current_limit, dict
+        ):
+            continue
+        previous_window = previous_limit.get("secondary")
+        current_window = current_limit.get("secondary")
+        if not isinstance(previous_window, dict) or not isinstance(
+            current_window, dict
+        ):
+            continue
+        reset_type = classify_weekly_reset(
+            previous_snapshot,
+            current_snapshot,
+            previous_window,
+            current_window,
+        )
+        if reset_type is None:
             continue
         timestamp = int(current_snapshot["collectedAtEpoch"])
-        previous_weekly_values = [
-            _number((limit_snapshot.get("secondary") or {}).get("usedPercent"))
-            for limit_snapshot in previous_limits.values()
-        ]
-        known_previous_weekly_values = [
-            value for value in previous_weekly_values if value is not None
-        ]
-        previous_weekly_max = (
-            max(known_previous_weekly_values)
-            if known_previous_weekly_values
-            else 0
-        )
         reset_type = classify_missing_credit_era(
-            choose_weekly_reset_type(reset_types),
+            reset_type,
             timestamp,
             observed_post_banking_hard_reset,
         )
+        previous_weekly_percent = _number(previous_window.get("usedPercent"))
         events.append(
             {
                 "timestamp": timestamp,
@@ -756,7 +1039,7 @@ def collect_weekly_reset_events(
                 "source": reset_type_source(reset_type),
                 "estimatedResetCreditUsed": reset_type
                 in ("manual", "inferred_manual"),
-                "previousWeeklyMaxPercent": previous_weekly_max,
+                "previousWeeklyPercent": previous_weekly_percent or 0,
                 "previousResetCredits": previous_count,
                 "currentResetCredits": current_count,
             }
@@ -799,17 +1082,21 @@ def svg_y(percent: float, top: int, height: int) -> float:
     return top + (100 - max(0, min(100, percent))) / 100 * height
 
 
-def format_percent(percent: float) -> str:
-    if percent.is_integer():
-        return f"{int(percent)}%"
-    return f"{percent:.1f}%"
-
-
 def cdata_script(script: str) -> str:
     return (
         "<script><![CDATA[\n"
         + script.replace("]]>", "]]]]><![CDATA[>")
         + "\n]]></script>"
+    )
+
+
+def compressed_svg_data_metadata(data: str) -> str:
+    compressed = gzip.compress(data.encode("utf-8"), compresslevel=9, mtime=0)
+    encoded = base64.b64encode(compressed).decode("ascii")
+    return (
+        '<metadata id="usage-data" data-encoding="gzip-base64">'
+        + encoded
+        + "</metadata>"
     )
 
 
@@ -861,24 +1148,26 @@ def render_svg(snapshots: list[dict[str, Any]]) -> None:
         "1 4",
         "8 2 2 2 2 2",
     ]
-    series_data: list[dict[str, Any]] = []
-    for index, (label, points) in enumerate(sorted(collect_series(snapshots).items())):
-        series_data.append(
-            {
-                "label": label,
-                "color": palette[index % len(palette)],
-                "dash": line_dashes[index % len(line_dashes)],
-                "points": [
-                    {
-                        "timestamp": timestamp,
-                        "percent": percent,
-                        "percentText": format_percent(percent),
-                        "localTime": format_epoch_local(timestamp),
-                    }
-                    for timestamp, percent in points
-                ],
-            }
-        )
+    usage_snapshots = validated_usage_snapshots(snapshots)
+    collected_series = sorted(collect_series(usage_snapshots).items())
+
+    def display_series(resolution_scale: int) -> list[dict[str, Any]]:
+        series_data: list[dict[str, Any]] = []
+        for index, (label, points) in enumerate(collected_series):
+            display_points = thin_display_points(points, last, resolution_scale)
+            series_data.append(
+                {
+                    "label": label,
+                    "color": palette[index % len(palette)],
+                    "dash": line_dashes[index % len(line_dashes)],
+                    "points": [
+                        [timestamp, percent]
+                        for timestamp, percent in display_points
+                    ],
+                }
+            )
+        return series_data
+
     reset_credit_points = collect_reset_credit_points(snapshots)
     flexible_credit_points = collect_flexible_credit_points(snapshots)
     reset_credit_expiration_anchors = collect_reset_credit_expiration_anchors(
@@ -889,8 +1178,8 @@ def render_svg(snapshots: list[dict[str, Any]]) -> None:
         if reset_credit_expiration_anchors
         else []
     )
-    natural_reset_summary = codex_natural_reset_summary(snapshots[-1])
-    weekly_reset_events = collect_weekly_reset_events(snapshots)
+    natural_reset_summary = codex_natural_reset_summary(usage_snapshots[-1])
+    weekly_reset_events = collect_weekly_reset_events(usage_snapshots)
     reset_credit_estimate = reset_credit_use_estimate(weekly_reset_events)
     reset_credit_max_count = max(
         [1] + [int(point["count"]) for point in reset_credit_points]
@@ -908,46 +1197,75 @@ def render_svg(snapshots: list[dict[str, Any]]) -> None:
     view_preset_options = "".join(
         view_preset_option(value) for value in VIEW_PRESETS
     )
-    data_json = json.dumps(
-        {
-            "first": first,
-            "last": last,
-            "width": width,
-            "minWidth": min_width,
-            "height": height,
-            "defaultViewPreset": selected_view_preset,
-            "left": left,
-            "right": right,
-            "top": top,
-            "plotWidth": plot_width,
-            "plotHeight": plot_height,
-            "resetTop": reset_top,
-            "resetHeight": reset_height,
-            "flexibleTop": flexible_top,
-            "flexibleHeight": flexible_height,
-            "resetCredit": {
-                "maxCount": reset_credit_max_count,
-                "points": reset_credit_points,
-                "expirationAnchors": reset_credit_expiration_anchors,
-                "expirationRows": reset_credit_expiration_rows,
-            },
-            "flexibleCredit": {
-                "maxBalance": flexible_credit_max_balance,
-                "points": flexible_credit_points,
-            },
-            "weeklyResets": weekly_reset_events,
-            "resetCreditEstimate": reset_credit_estimate,
-            "resetCreditBankingIntro": RESET_CREDIT_BANKING_INTRO_LABEL,
-            "series": series_data,
+    data = {
+        "first": first,
+        "last": last,
+        "width": width,
+        "minWidth": min_width,
+        "height": height,
+        "defaultViewPreset": selected_view_preset,
+        "left": left,
+        "right": right,
+        "top": top,
+        "plotWidth": plot_width,
+        "plotHeight": plot_height,
+        "resetTop": reset_top,
+        "resetHeight": reset_height,
+        "flexibleTop": flexible_top,
+        "flexibleHeight": flexible_height,
+        "resetCredit": {
+            "maxCount": reset_credit_max_count,
+            "points": reset_credit_points,
+            "expirationAnchors": reset_credit_expiration_anchors,
+            "expirationRows": reset_credit_expiration_rows,
         },
-        separators=(",", ":"),
-    )
+        "flexibleCredit": {
+            "maxBalance": flexible_credit_max_balance,
+            "points": flexible_credit_points,
+        },
+        "weeklyResets": weekly_reset_events,
+        "resetCreditEstimate": reset_credit_estimate,
+        "resetCreditBankingIntro": RESET_CREDIT_BANKING_INTRO_LABEL,
+        "series": [],
+    }
+    resolution_scale = 1
+    previous_metadata_size: int | None = None
+    while True:
+        data["series"] = display_series(resolution_scale)
+        data_json = json.dumps(data, separators=(",", ":"))
+        data_metadata = compressed_svg_data_metadata(data_json)
+        metadata_size = len(data_metadata)
+        if metadata_size <= SVG_DATA_MAX_ENCODED_CHARACTERS:
+            break
+        if (
+            previous_metadata_size is not None
+            and metadata_size >= previous_metadata_size
+        ):
+            raise RuntimeError("unable to fit usage data within SVG byte budget")
+        previous_metadata_size = metadata_size
+        resolution_scale *= 2
     script = """
-const usageData = __USAGE_DATA__;
+(async () => {
+const compressedUsageData = Uint8Array.from(
+  atob(document.getElementById("usage-data").textContent),
+  (character) => character.charCodeAt(0)
+);
+const usageData = JSON.parse(new TextDecoder().decode(
+  await new Response(
+    new Blob([compressedUsageData]).stream().pipeThrough(
+      new DecompressionStream("gzip")
+    )
+  ).arrayBuffer()
+));
+for (const series of usageData.series) {
+  series.points = series.points.map(([timestamp, percent]) => ({ timestamp, percent }));
+}
 const svgNS = "http://www.w3.org/2000/svg";
 const queryParams = new URLSearchParams(window.location.search);
 const svgRoot = document.getElementById("codex-meter-svg");
-const baseRightColumnX = usageData.left + usageData.plotWidth + 28;
+const currentValueGap = 8;
+const rightColumnGap = 54;
+const baseRightColumnX = usageData.left + usageData.plotWidth + rightColumnGap;
 const presetSeconds = {
   five_hours: 5 * 60 * 60,
   one_day: 24 * 60 * 60,
@@ -999,7 +1317,7 @@ function applyResponsiveLayout() {
   usageData.width = layoutWidth;
   usageData.plotWidth = Math.max(600, layoutWidth - usageData.left - usageData.right);
   const plotRight = usageData.left + usageData.plotWidth;
-  const rightColumnX = plotRight + 28;
+  const rightColumnX = plotRight + rightColumnGap;
 
   svgRoot.setAttribute("viewBox", `0 0 ${layoutWidth} ${usageData.height}`);
   document.getElementById("control-panel-fo").setAttribute("width", String(Math.max(1, layoutWidth - 64)));
@@ -1420,16 +1738,27 @@ function renderDayBoundaries(range) {
 function renderSeries(range) {
   const seriesLayer = document.getElementById("series-layer");
   const legendLayer = document.getElementById("legend-layer");
+  const currentValueLayer = document.getElementById("current-value-layer");
   const emptyMessage = document.getElementById("empty-message");
   clearChildren(seriesLayer);
   clearChildren(legendLayer);
+  clearChildren(currentValueLayer);
   let visiblePointCount = 0;
+  const currentValueLabels = [];
 
   usageData.series.forEach((series, index) => {
     const active = activeSeriesIndexes.has(index);
     const visiblePoints = series.points.filter(
       (point) => active && point.timestamp >= range.start && point.timestamp <= range.end
     );
+    const latestPoint = series.points.length ? series.points[series.points.length - 1] : null;
+    if (active && latestPoint && Number.isFinite(latestPoint.percent)) {
+      currentValueLabels.push({
+        series,
+        point: latestPoint,
+        targetY: yPosition(latestPoint.percent)
+      });
+    }
     visiblePointCount += visiblePoints.length;
     if (visiblePoints.length > 1) {
       const pathData = visiblePoints.map((point, pointIndex) => {
@@ -1454,13 +1783,13 @@ function renderSeries(range) {
         fill: series.color
       });
       const title = svgElement("title");
-      title.textContent = `${series.label} - ${point.localTime} - ${point.percentText || formatPercent(point.percent)} used`;
+      title.textContent = `${series.label} - ${formatDate(point.timestamp)} - ${formatPercent(point.percent)} used`;
       circle.appendChild(title);
       seriesLayer.appendChild(circle);
     }
 
     const legendY = usageData.top + 18 + index * 24;
-    const legendX = usageData.left + usageData.plotWidth + 28;
+    const legendX = usageData.left + usageData.plotWidth + rightColumnGap;
     const opacity = active ? (visiblePoints.length ? 1 : 0.35) : 0.18;
     const checkboxContainer = svgElement("foreignObject", {
       x: legendX,
@@ -1505,10 +1834,97 @@ function renderSeries(range) {
     legendLayer.appendChild(label);
   });
 
+  renderCurrentValueLabels(currentValueLayer, currentValueLabels);
+
   emptyMessage.textContent = activeSeriesIndexes.size
     ? "No snapshots in selected window"
     : "No usage lines selected";
   emptyMessage.setAttribute("display", visiblePointCount ? "none" : "block");
+}
+
+function spacedCurrentLabelPositions(labels) {
+  const minY = usageData.top + 12;
+  const maxY = usageData.top + usageData.plotHeight - 8;
+  const minSpacing = 16;
+  const positioned = labels
+    .map((label) => ({
+      ...label,
+      y: Math.max(minY, Math.min(maxY, label.targetY))
+    }))
+    .sort((a, b) => a.y - b.y);
+
+  for (let index = 1; index < positioned.length; index += 1) {
+    const previous = positioned[index - 1];
+    const current = positioned[index];
+    if (current.y - previous.y < minSpacing) {
+      current.y = previous.y + minSpacing;
+    }
+  }
+
+  const overflow = positioned.length ? positioned[positioned.length - 1].y - maxY : 0;
+  if (overflow > 0) {
+    for (const label of positioned) {
+      label.y -= overflow;
+    }
+  }
+
+  for (let index = 0; index < positioned.length; index += 1) {
+    positioned[index].y = Math.max(minY, Math.min(maxY, positioned[index].y));
+    if (index > 0 && positioned[index].y - positioned[index - 1].y < minSpacing) {
+      positioned[index].y = Math.min(maxY, positioned[index - 1].y + minSpacing);
+    }
+  }
+
+  return positioned;
+}
+
+function renderCurrentValueLabels(layer, labels) {
+  if (!labels.length) {
+    return;
+  }
+  const plotRight = usageData.left + usageData.plotWidth;
+  const labelX = plotRight + currentValueGap;
+  const header = svgElement("text", {
+    x: labelX,
+    y: usageData.top - 8,
+    "font-family": "system-ui, -apple-system, sans-serif",
+    "font-size": 10,
+    fill: "#64748b"
+  });
+  header.textContent = "Current";
+  layer.appendChild(header);
+
+  for (const label of spacedCurrentLabelPositions(labels)) {
+    const actualY = yPosition(label.point.percent);
+    layer.appendChild(svgElement("line", {
+      x1: (plotRight - 5).toFixed(2),
+      y1: actualY.toFixed(2),
+      x2: (plotRight + 4).toFixed(2),
+      y2: actualY.toFixed(2),
+      stroke: label.series.color,
+      "stroke-width": 2,
+      "stroke-dasharray": label.series.dash || "none"
+    }));
+
+    const text = svgElement("text", {
+      class: "current-meter-label",
+      x: labelX,
+      y: (label.y + 4).toFixed(2),
+      "font-family": "system-ui, -apple-system, sans-serif",
+      "font-size": 11,
+      "font-weight": 700,
+      fill: label.series.color,
+      stroke: "#ffffff",
+      "stroke-width": 3,
+      "paint-order": "stroke fill"
+    });
+    const percentText = formatPercent(label.point.percent);
+    text.textContent = percentText;
+    const title = svgElement("title");
+    title.textContent = `Current ${label.series.label} - ${formatDate(label.point.timestamp)} - ${percentText} used`;
+    text.appendChild(title);
+    layer.appendChild(text);
+  }
 }
 
 function weeklyResetLabel(type) {
@@ -1571,7 +1987,7 @@ function renderWeeklyResets(range) {
       x = pointX - labelWidth - 8;
     }
     x = Math.max(usageData.left + 4, Math.min(x, plotRight - labelWidth - 4));
-    let y = yPosition(Number(event.previousWeeklyMaxPercent ?? event.previousPercent ?? event.currentPercent ?? 0)) - 8;
+    let y = yPosition(Number(event.previousWeeklyPercent ?? event.previousPercent ?? event.currentPercent ?? 0)) - 8;
     y = Math.max(usageData.top + 14, Math.min(y, usageData.top + usageData.plotHeight - 6));
     let box = { x, y: y - labelHeight + 3, width: labelWidth, height: labelHeight };
     while (placedLabels.some((placed) => labelBoxOverlaps(box, placed))) {
@@ -1585,7 +2001,7 @@ function renderWeeklyResets(range) {
 
     const title = svgElement("title");
     const resetNote = weeklyResetNote(event.type);
-    title.textContent = `${label} - ${event.localTime} - ${event.source} classification - max weekly usage before reset ${event.previousWeeklyMaxPercent}% - reset credits ${event.previousResetCredits ?? "unknown"} to ${event.currentResetCredits ?? "unknown"}${event.estimatedResetCreditUsed ? " - counts toward estimated reset-credit use" : ""}${resetNote ? " - " + resetNote : ""}`;
+    title.textContent = `${label} - ${event.localTime} - ${event.source} classification - Codex + Work weekly usage before reset ${event.previousWeeklyPercent}% - reset credits ${event.previousResetCredits ?? "unknown"} to ${event.currentResetCredits ?? "unknown"}${event.estimatedResetCreditUsed ? " - counts toward estimated reset-credit use" : ""}${resetNote ? " - " + resetNote : ""}`;
     const text = svgElement("text", {
       class: "weekly-reset-label",
       x: x.toFixed(2),
@@ -2022,7 +2438,8 @@ document.querySelectorAll(".history-scroll").forEach((scroller) => {
   });
 });
 render();
-""".replace("__USAGE_DATA__", data_json)
+})();
+"""
 
     parts = [
         '<svg id="codex-meter-svg" xmlns="http://www.w3.org/2000/svg" '
@@ -2111,8 +2528,8 @@ render();
         '</div>'
     )
     parts.append("</foreignObject>")
-    expiry_x = left + plot_width + 28
-    reset_summary_y = top + 18 + len(series_data) * 24 + 32
+    expiry_x = left + plot_width + 54
+    reset_summary_y = top + 18 + len(collected_series) * 24 + 32
     parts.append('<g id="right-column">')
     parts.append(
         f'<text x="{expiry_x}" y="{reset_summary_y}" '
@@ -2124,7 +2541,7 @@ render();
         f'<text x="{expiry_x}" y="{reset_summary_y + 21}" '
         'font-family="system-ui, -apple-system, sans-serif" '
         'font-size="11" fill="#334155">'
-        f'Codex 5-hour: {html.escape(natural_reset_summary["fiveHour"])}</text>'
+        f'Codex + Work 5-hour: {html.escape(natural_reset_summary["fiveHour"])}</text>'
     )
     if natural_reset_summary["fiveHourNote"]:
         parts.append(
@@ -2137,7 +2554,7 @@ render();
         f'<text x="{expiry_x}" y="{reset_summary_y + 55}" '
         'font-family="system-ui, -apple-system, sans-serif" '
         'font-size="11" fill="#334155">'
-        f'Codex weekly: {html.escape(natural_reset_summary["weekly"])}</text>'
+        f'Codex + Work weekly: {html.escape(natural_reset_summary["weekly"])}</text>'
     )
     expiry_y = reset_top
     parts.append(
@@ -2322,17 +2739,23 @@ render();
     parts.append('<g id="series-layer"></g>')
     parts.append('<g class="reset-graph-section" id="reset-credit-layer"></g>')
     parts.append('<g class="flexible-graph-section" id="flexible-credit-layer"></g>')
+    parts.append('<g id="current-value-layer"></g>')
     parts.append('<g id="legend-layer"></g>')
 
+    parts.append(data_metadata)
     parts.append(cdata_script(script))
     parts.append("</svg>\n")
-    SVG_PATH.write_text("\n".join(parts), "utf-8")
+    svg = "\n".join(parts)
+    if len(svg.encode("utf-8")) >= SVG_BROWSER_BYTE_LIMIT:
+        raise RuntimeError("generated SVG exceeds Chrome's local-file byte limit")
+    atomic_write_text(SVG_PATH, svg)
 
 
 def render_html() -> None:
     view_presets_json = json.dumps(VIEW_PRESETS, separators=(",", ":"))
     default_view_preset_json = json.dumps(load_default_view_preset())
-    HTML_PATH.write_text(
+    atomic_write_text(
+        HTML_PATH,
         f"""<!doctype html>
 <html lang="en">
 <head>
@@ -2368,7 +2791,7 @@ def render_html() -> None:
   </style>
 </head>
 <body>
-  <iframe id="graph-frame" src="usage.svg" title="Codex usage graph"></iframe>
+  <iframe id="graph-frame" src="usage.svg" title="Codex and Work usage graph"></iframe>
   <div id="status"></div>
   <script>
     const refreshSeconds = {HTML_REFRESH_SECONDS};
@@ -2603,7 +3026,6 @@ def render_html() -> None:
 </body>
 </html>
 """,
-        "utf-8",
     )
 
 
@@ -2637,17 +3059,60 @@ def summary_lines(result: dict[str, Any]) -> list[str]:
     return lines
 
 
-def main() -> None:
+def collect_and_render(client: CodexAppServerClient) -> dict[str, Any]:
     previous_snapshot = load_latest_snapshot()
-    result = read_codex_rate_limits()
+    result = client.read_rate_limits()
     snapshot = snapshot_limits(result)
     append_snapshot(snapshot)
     alert_if_reset_credit_count_changed(previous_snapshot, snapshot)
     record_if_flexible_credit_changed(previous_snapshot, snapshot)
     render_svg(load_snapshots())
     render_html()
+    return result
 
-    if sys.stdout.isatty():
+
+def positive_interval_seconds(value: str) -> int:
+    try:
+        interval_seconds = int(value)
+    except ValueError as exc:
+        raise argparse.ArgumentTypeError(
+            "interval must be a positive integer"
+        ) from exc
+    if interval_seconds < 1:
+        raise argparse.ArgumentTypeError("interval must be a positive integer")
+    return interval_seconds
+
+
+def parse_arguments(arguments: list[str]) -> argparse.Namespace:
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument(
+        "--interval-seconds",
+        type=positive_interval_seconds,
+        help="keep running and collect at this interval",
+    )
+    return parser.parse_args(arguments)
+
+
+def stop_on_sigterm(_signum: int, _frame: object) -> None:
+    raise SystemExit(0)
+
+
+def main() -> None:
+    arguments = parse_arguments(sys.argv[1:])
+    signal.signal(signal.SIGTERM, stop_on_sigterm)
+
+    with CodexAppServerClient() as client:
+        if arguments.interval_seconds is None:
+            result = collect_and_render(client)
+        else:
+            while True:
+                cycle_started = time.monotonic()
+                collect_and_render(client)
+                elapsed = time.monotonic() - cycle_started
+                delay = arguments.interval_seconds - elapsed
+                time.sleep(delay if delay > 0 else arguments.interval_seconds)
+
+    if arguments.interval_seconds is None and sys.stdout.isatty():
         print(f"Wrote {SNAPSHOTS_PATH}")
         print(f"Wrote {LATEST_PATH}")
         print(f"Wrote {SVG_PATH}")

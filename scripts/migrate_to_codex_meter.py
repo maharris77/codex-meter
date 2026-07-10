@@ -72,9 +72,9 @@ def migrate_data() -> dict[str, int]:
         return {"snapshot_count": 0}
 
     write_jsonl(NEW_SNAPSHOTS_PATH, rows)
-    NEW_LATEST_PATH.write_text(
+    collect_codex_usage.atomic_write_text(
+        NEW_LATEST_PATH,
         json.dumps(rows[-1], indent=2, sort_keys=True),
-        encoding="utf-8",
     )
     collect_codex_usage.render_svg(rows)
     return {"snapshot_count": len(rows)}

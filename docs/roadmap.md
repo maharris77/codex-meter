@@ -29,7 +29,51 @@ Goal: make the current public tool trustworthy at higher sampling frequency.
 - Keep reset-credit, flexible-credit, and reset-label behavior understandable
   from local data.
 
-### 0.7 ThreadMonitor Read-Only Module
+### 0.7 ChatGPT Work Compatibility
+
+Goal: make the current ChatGPT desktop generation the explicit supported
+runtime while preserving trustworthy historical data.
+
+- Use the Codex app-server bundled inside `/Applications/ChatGPT.app`.
+- Treat the main `codex` bucket as the shared Codex + Work quota without
+  claiming mode-level attribution the service does not provide.
+- Reject transient placeholder quota windows without deleting raw snapshots.
+- Support second-based collection intervals with one persistent app-server
+  session.
+- Show current meter values independently of the historical window being
+  browsed.
+- Keep the browser graph below the local-file size limit by compressing and
+  thinning display data without removing raw snapshots.
+
+Compatibility policy:
+
+- Support the current ChatGPT desktop app generation only.
+- Do not add a fallback executable path for standalone pre-`26.707` Codex.app
+  releases.
+
+### 0.8 Local Data Service And Compatibility Follow-Up
+
+Goal: make historical queries incremental and finish evaluating the richer
+account data exposed by the current ChatGPT app-server.
+
+- Ingest each appended snapshot once into an indexed local SQLite store.
+- Serve the dashboard and read-only range queries from one loopback-only local
+  service.
+- Request data by series, start, end, and display resolution so narrow
+  historical windows can recover fine detail on demand.
+- Cache range results with size-bounded eviction and HTTP validation while
+  invalidating only ranges touched by new samples.
+- Replace estimated current reset-credit expiration details with exact
+  `rateLimitResetCredits.credits` fields when the account has available
+  credits.
+- Evaluate `account/usage/read` for account-level token trends while keeping it
+  separate from thread-level attribution.
+- Test one real Work task to determine whether its rollout metadata introduces
+  a thread type that ThreadMonitor needs to classify.
+- Preserve JSONL as the raw audit history and validate migration, loopback
+  exposure, startup lifecycle, and range-query performance before promotion.
+
+### 0.9 ThreadMonitor Read-Only Module
 
 Goal: add an optional Activity Monitor-style view of Codex thread activity
 without controlling Codex sessions.
@@ -83,7 +127,7 @@ Promotion gate:
   including at least one subagent tree, without showing private prompt text in
   the normal view.
 
-### 0.8 Project Metrics Panels
+### 0.10 Project Metrics Panels
 
 Goal: let project-specific adapters contribute batch, token, and throughput
 metrics to the Codex Meter dashboard without project-specific code in Codex
@@ -95,7 +139,7 @@ Meter.
 - Keep different units on separate linked panels rather than forcing unrelated
   values onto one y-axis.
 
-### 0.9 Coordination Alerts
+### 0.11 Coordination Alerts
 
 Goal: make thread and quota state action-relevant while staying notification
 first.

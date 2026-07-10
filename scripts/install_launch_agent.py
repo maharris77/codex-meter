@@ -67,9 +67,15 @@ def launch_agent_target() -> str:
 def build_plist(interval_seconds: int) -> dict[str, object]:
     return {
         "Label": LABEL,
-        "ProgramArguments": [PYTHON_BIN, str(COLLECTOR)],
+        "ProgramArguments": [
+            PYTHON_BIN,
+            str(COLLECTOR),
+            "--interval-seconds",
+            str(interval_seconds),
+        ],
         "RunAtLoad": True,
-        "StartInterval": interval_seconds,
+        "KeepAlive": True,
+        "ThrottleInterval": 30,
         "WorkingDirectory": str(ROOT),
         "StandardOutPath": str(OUTPUT_DIR / "launchd.out.log"),
         "StandardErrorPath": str(OUTPUT_DIR / "launchd.err.log"),
@@ -101,7 +107,6 @@ def main() -> None:
         ["launchctl", "bootstrap", f"gui/{os.getuid()}", str(PLIST_PATH)],
         check=True,
     )
-    subprocess.run(["launchctl", "kickstart", "-k", launch_agent_target()], check=True)
 
     print(f"Wrote {PLIST_PATH}")
     print(f"Loaded {launch_agent_target()}")
