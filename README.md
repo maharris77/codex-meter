@@ -75,6 +75,9 @@ is plotted as a separate flexible-credit graph below the reset-credit graph.
 - Checkbox choices are remembered by the browser across page reloads.
 - View and browse controls only change what the graph displays. The sampling
   interval is set by the LaunchAgent installer.
+- Raw `snapshots.jsonl` history retains every collected sample. The browser
+  graph keeps the latest 5 hours at full resolution and thins older display
+  points while preserving each time bucket's first, last, minimum, and maximum.
 
 ### Credit Graphs
 
@@ -126,7 +129,7 @@ is plotted as a separate flexible-credit graph below the reset-credit graph.
 
 - macOS only.
 - Uses the Codex app-server bundled inside the current ChatGPT desktop app.
-- Tested on ChatGPT.app `26.707.30751` (`com.openai.codex`) with its bundled
+- Tested on ChatGPT.app `26.707.31428` (`com.openai.codex`) with its bundled
   `codex-cli 0.144.0-alpha.4`.
 - The main `codex` bucket is shared by Codex and Work. Codex Meter records the
   combined quota but cannot attribute each percentage point to one mode.
