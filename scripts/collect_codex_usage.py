@@ -4,13 +4,16 @@
 from __future__ import annotations
 
 import argparse
+import base64
 import copy
+import gzip
 import html
 import json
 import select
 import signal
 import subprocess
 import sys
+import tempfile
 import time
 from collections import defaultdict, deque
 from datetime import datetime, timezone
@@ -39,6 +42,15 @@ RESET_CREDIT_BANKING_INTRO_EPOCH = int(
 )
 RESET_CREDIT_BANKING_INTRO_LABEL = "2026-06-11"
 HTML_REFRESH_SECONDS = 30
+SVG_BROWSER_BYTE_LIMIT = 1024 * 1024
+SVG_DATA_MAX_ENCODED_CHARACTERS = 700 * 1024
+DISPLAY_FULL_RESOLUTION_SECONDS = 5 * 60 * 60
+DISPLAY_RESOLUTION_TIERS = (
+    (7 * 24 * 60 * 60, 2 * 60),
+    (30 * 24 * 60 * 60, 15 * 60),
+    (365 * 24 * 60 * 60, 2 * 60 * 60),
+    (None, 24 * 60 * 60),
+)
 DEFAULT_VIEW_PRESET = "seven_days"
 VIEW_PRESETS = (
     "five_hours",
@@ -267,7 +279,32 @@ def append_snapshot(snapshot: dict[str, Any]) -> None:
     with SNAPSHOTS_PATH.open("a", encoding="utf-8") as handle:
         handle.write(json.dumps(snapshot, separators=(",", ":"), sort_keys=True))
         handle.write("\n")
-    LATEST_PATH.write_text(json.dumps(snapshot, indent=2, sort_keys=True), "utf-8")
+    atomic_write_text(
+        LATEST_PATH,
+        json.dumps(snapshot, indent=2, sort_keys=True),
+    )
+
+
+def atomic_write_text(path: Path, content: str) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    existing_mode = path.stat().st_mode & 0o777 if path.exists() else None
+    temporary_path: Path | None = None
+    try:
+        with tempfile.NamedTemporaryFile(
+            mode="w",
+            encoding="utf-8",
+            dir=path.parent,
+            prefix=f".{path.name}.",
+            suffix=".tmp",
+            delete=False,
+        ) as handle:
+            temporary_path = Path(handle.name)
+            handle.write(content)
+        temporary_path.chmod(existing_mode if existing_mode is not None else 0o644)
+        temporary_path.replace(path)
+    finally:
+        if temporary_path is not None:
+            temporary_path.unlink(missing_ok=True)
 
 
 def load_settings() -> dict[str, Any]:
@@ -510,6 +547,51 @@ def collect_series(
                     label = series_label(limit_id, limit_snapshot, window_name, window)
                     series[label].append((collected_at, float(used_percent)))
     return dict(series)
+
+
+def thin_display_points(
+    points: list[tuple[int, float]],
+    latest_timestamp: int,
+    resolution_scale: int = 1,
+) -> list[tuple[int, float]]:
+    thinned: list[tuple[int, float]] = []
+    bucket: list[tuple[int, float]] = []
+    bucket_key: tuple[int, int] | None = None
+
+    def flush_bucket() -> None:
+        if not bucket:
+            return
+        candidates = {
+            0,
+            len(bucket) - 1,
+            min(range(len(bucket)), key=lambda index: bucket[index][1]),
+            max(range(len(bucket)), key=lambda index: bucket[index][1]),
+        }
+        thinned.extend(bucket[index] for index in sorted(candidates))
+        bucket.clear()
+
+    for point in points:
+        timestamp = point[0]
+        age_seconds = max(0, latest_timestamp - timestamp)
+        if age_seconds <= DISPLAY_FULL_RESOLUTION_SECONDS:
+            flush_bucket()
+            bucket_key = None
+            thinned.append(point)
+            continue
+
+        bucket_seconds = next(
+            resolution * resolution_scale
+            for maximum_age, resolution in DISPLAY_RESOLUTION_TIERS
+            if maximum_age is None or age_seconds <= maximum_age
+        )
+        point_bucket_key = (bucket_seconds, timestamp // bucket_seconds)
+        if point_bucket_key != bucket_key:
+            flush_bucket()
+            bucket_key = point_bucket_key
+        bucket.append(point)
+
+    flush_bucket()
+    return thinned
 
 
 def collect_reset_credit_points(snapshots: list[dict[str, Any]]) -> list[dict[str, Any]]:
@@ -1000,17 +1082,21 @@ def svg_y(percent: float, top: int, height: int) -> float:
     return top + (100 - max(0, min(100, percent))) / 100 * height
 
 
-def format_percent(percent: float) -> str:
-    if percent.is_integer():
-        return f"{int(percent)}%"
-    return f"{percent:.1f}%"
-
-
 def cdata_script(script: str) -> str:
     return (
         "<script><![CDATA[\n"
         + script.replace("]]>", "]]]]><![CDATA[>")
         + "\n]]></script>"
+    )
+
+
+def compressed_svg_data_metadata(data: str) -> str:
+    compressed = gzip.compress(data.encode("utf-8"), compresslevel=9, mtime=0)
+    encoded = base64.b64encode(compressed).decode("ascii")
+    return (
+        '<metadata id="usage-data" data-encoding="gzip-base64">'
+        + encoded
+        + "</metadata>"
     )
 
 
@@ -1063,26 +1149,25 @@ def render_svg(snapshots: list[dict[str, Any]]) -> None:
         "8 2 2 2 2 2",
     ]
     usage_snapshots = validated_usage_snapshots(snapshots)
-    series_data: list[dict[str, Any]] = []
-    for index, (label, points) in enumerate(
-        sorted(collect_series(usage_snapshots).items())
-    ):
-        series_data.append(
-            {
-                "label": label,
-                "color": palette[index % len(palette)],
-                "dash": line_dashes[index % len(line_dashes)],
-                "points": [
-                    {
-                        "timestamp": timestamp,
-                        "percent": percent,
-                        "percentText": format_percent(percent),
-                        "localTime": format_epoch_local(timestamp),
-                    }
-                    for timestamp, percent in points
-                ],
-            }
-        )
+    collected_series = sorted(collect_series(usage_snapshots).items())
+
+    def display_series(resolution_scale: int) -> list[dict[str, Any]]:
+        series_data: list[dict[str, Any]] = []
+        for index, (label, points) in enumerate(collected_series):
+            display_points = thin_display_points(points, last, resolution_scale)
+            series_data.append(
+                {
+                    "label": label,
+                    "color": palette[index % len(palette)],
+                    "dash": line_dashes[index % len(line_dashes)],
+                    "points": [
+                        [timestamp, percent]
+                        for timestamp, percent in display_points
+                    ],
+                }
+            )
+        return series_data
+
     reset_credit_points = collect_reset_credit_points(snapshots)
     flexible_credit_points = collect_flexible_credit_points(snapshots)
     reset_credit_expiration_anchors = collect_reset_credit_expiration_anchors(
@@ -1112,42 +1197,69 @@ def render_svg(snapshots: list[dict[str, Any]]) -> None:
     view_preset_options = "".join(
         view_preset_option(value) for value in VIEW_PRESETS
     )
-    data_json = json.dumps(
-        {
-            "first": first,
-            "last": last,
-            "width": width,
-            "minWidth": min_width,
-            "height": height,
-            "defaultViewPreset": selected_view_preset,
-            "left": left,
-            "right": right,
-            "top": top,
-            "plotWidth": plot_width,
-            "plotHeight": plot_height,
-            "resetTop": reset_top,
-            "resetHeight": reset_height,
-            "flexibleTop": flexible_top,
-            "flexibleHeight": flexible_height,
-            "resetCredit": {
-                "maxCount": reset_credit_max_count,
-                "points": reset_credit_points,
-                "expirationAnchors": reset_credit_expiration_anchors,
-                "expirationRows": reset_credit_expiration_rows,
-            },
-            "flexibleCredit": {
-                "maxBalance": flexible_credit_max_balance,
-                "points": flexible_credit_points,
-            },
-            "weeklyResets": weekly_reset_events,
-            "resetCreditEstimate": reset_credit_estimate,
-            "resetCreditBankingIntro": RESET_CREDIT_BANKING_INTRO_LABEL,
-            "series": series_data,
+    data = {
+        "first": first,
+        "last": last,
+        "width": width,
+        "minWidth": min_width,
+        "height": height,
+        "defaultViewPreset": selected_view_preset,
+        "left": left,
+        "right": right,
+        "top": top,
+        "plotWidth": plot_width,
+        "plotHeight": plot_height,
+        "resetTop": reset_top,
+        "resetHeight": reset_height,
+        "flexibleTop": flexible_top,
+        "flexibleHeight": flexible_height,
+        "resetCredit": {
+            "maxCount": reset_credit_max_count,
+            "points": reset_credit_points,
+            "expirationAnchors": reset_credit_expiration_anchors,
+            "expirationRows": reset_credit_expiration_rows,
         },
-        separators=(",", ":"),
-    )
+        "flexibleCredit": {
+            "maxBalance": flexible_credit_max_balance,
+            "points": flexible_credit_points,
+        },
+        "weeklyResets": weekly_reset_events,
+        "resetCreditEstimate": reset_credit_estimate,
+        "resetCreditBankingIntro": RESET_CREDIT_BANKING_INTRO_LABEL,
+        "series": [],
+    }
+    resolution_scale = 1
+    previous_metadata_size: int | None = None
+    while True:
+        data["series"] = display_series(resolution_scale)
+        data_json = json.dumps(data, separators=(",", ":"))
+        data_metadata = compressed_svg_data_metadata(data_json)
+        metadata_size = len(data_metadata)
+        if metadata_size <= SVG_DATA_MAX_ENCODED_CHARACTERS:
+            break
+        if (
+            previous_metadata_size is not None
+            and metadata_size >= previous_metadata_size
+        ):
+            raise RuntimeError("unable to fit usage data within SVG byte budget")
+        previous_metadata_size = metadata_size
+        resolution_scale *= 2
     script = """
-const usageData = __USAGE_DATA__;
+(async () => {
+const compressedUsageData = Uint8Array.from(
+  atob(document.getElementById("usage-data").textContent),
+  (character) => character.charCodeAt(0)
+);
+const usageData = JSON.parse(new TextDecoder().decode(
+  await new Response(
+    new Blob([compressedUsageData]).stream().pipeThrough(
+      new DecompressionStream("gzip")
+    )
+  ).arrayBuffer()
+));
+for (const series of usageData.series) {
+  series.points = series.points.map(([timestamp, percent]) => ({ timestamp, percent }));
+}
 const svgNS = "http://www.w3.org/2000/svg";
 const queryParams = new URLSearchParams(window.location.search);
 const svgRoot = document.getElementById("codex-meter-svg");
@@ -1658,7 +1770,7 @@ function renderSeries(range) {
         fill: series.color
       });
       const title = svgElement("title");
-      title.textContent = `${series.label} - ${point.localTime} - ${point.percentText || formatPercent(point.percent)} used`;
+      title.textContent = `${series.label} - ${formatDate(point.timestamp)} - ${formatPercent(point.percent)} used`;
       circle.appendChild(title);
       seriesLayer.appendChild(circle);
     }
@@ -2226,7 +2338,8 @@ document.querySelectorAll(".history-scroll").forEach((scroller) => {
   });
 });
 render();
-""".replace("__USAGE_DATA__", data_json)
+})();
+"""
 
     parts = [
         '<svg id="codex-meter-svg" xmlns="http://www.w3.org/2000/svg" '
@@ -2316,7 +2429,7 @@ render();
     )
     parts.append("</foreignObject>")
     expiry_x = left + plot_width + 28
-    reset_summary_y = top + 18 + len(series_data) * 24 + 32
+    reset_summary_y = top + 18 + len(collected_series) * 24 + 32
     parts.append('<g id="right-column">')
     parts.append(
         f'<text x="{expiry_x}" y="{reset_summary_y}" '
@@ -2528,15 +2641,20 @@ render();
     parts.append('<g class="flexible-graph-section" id="flexible-credit-layer"></g>')
     parts.append('<g id="legend-layer"></g>')
 
+    parts.append(data_metadata)
     parts.append(cdata_script(script))
     parts.append("</svg>\n")
-    SVG_PATH.write_text("\n".join(parts), "utf-8")
+    svg = "\n".join(parts)
+    if len(svg.encode("utf-8")) >= SVG_BROWSER_BYTE_LIMIT:
+        raise RuntimeError("generated SVG exceeds Chrome's local-file byte limit")
+    atomic_write_text(SVG_PATH, svg)
 
 
 def render_html() -> None:
     view_presets_json = json.dumps(VIEW_PRESETS, separators=(",", ":"))
     default_view_preset_json = json.dumps(load_default_view_preset())
-    HTML_PATH.write_text(
+    atomic_write_text(
+        HTML_PATH,
         f"""<!doctype html>
 <html lang="en">
 <head>
@@ -2807,7 +2925,6 @@ def render_html() -> None:
 </body>
 </html>
 """,
-        "utf-8",
     )
 
 
