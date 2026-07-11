@@ -146,6 +146,90 @@ class UsageSnapshotValidationTests(unittest.TestCase):
         )
         self.assertEqual([event["type"] for event in events], ["hard"])
 
+    def test_hard_reset_alert_waits_for_confirmation_and_does_not_replay(self) -> None:
+        previous = [
+            snapshot(1_000, 80, 10_000),
+            snapshot(1_030, 0, 70_000),
+            snapshot(1_060, 0, 70_000),
+        ]
+
+        events = meter.newly_confirmed_hard_reset_events(
+            previous,
+            snapshot(1_090, 1, 70_000),
+        )
+        replayed = meter.newly_confirmed_hard_reset_events(
+            [*previous, snapshot(1_090, 1, 70_000)],
+            snapshot(1_120, 1, 70_000),
+        )
+        transient = meter.newly_confirmed_hard_reset_events(
+            [
+                snapshot(2_000, 49, 20_000),
+                snapshot(2_030, 0, 80_000),
+            ],
+            snapshot(2_060, 49, 20_000),
+        )
+
+        self.assertEqual([event["type"] for event in events], ["hard"])
+        self.assertEqual(replayed, [])
+        self.assertEqual(transient, [])
+
+    def test_manual_and_spark_resets_do_not_create_hard_reset_alerts(self) -> None:
+        manual_previous = [
+            snapshot(1_000, 80, 10_000, reset_credits=1),
+        ]
+        spark_previous = [
+            snapshot(2_000, 49, 10_000, spark_used=7, spark_reset=20_000),
+            snapshot(2_030, 49, 10_000, spark_used=0, spark_reset=80_000),
+            snapshot(2_060, 49, 10_000, spark_used=0, spark_reset=80_000),
+        ]
+
+        manual_events = meter.newly_confirmed_hard_reset_events(
+            manual_previous,
+            snapshot(1_030, 0, 70_000, reset_credits=0),
+        )
+        spark_events = meter.newly_confirmed_hard_reset_events(
+            spark_previous,
+            snapshot(
+                2_090,
+                49,
+                10_000,
+                spark_used=1,
+                spark_reset=80_000,
+            ),
+        )
+
+        self.assertEqual(manual_events, [])
+        self.assertEqual(spark_events, [])
+
+    def test_hard_reset_event_is_recorded_and_notified(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            target = Path(temporary_directory) / "hard_reset_events.jsonl"
+            detected = snapshot(1_090, 1, 70_000)
+            event = {
+                "timestamp": 1_030,
+                "localTime": "test",
+                "type": "hard",
+                "source": "observed",
+                "estimatedResetCreditUsed": False,
+                "previousWeeklyPercent": 80,
+                "previousResetCredits": 0,
+                "currentResetCredits": 0,
+            }
+
+            with (
+                mock.patch.object(meter, "HARD_RESET_EVENTS_PATH", target),
+                mock.patch.object(meter, "send_notification") as notification,
+            ):
+                meter.record_hard_reset_event(event, detected)
+
+            record = json.loads(target.read_text(encoding="utf-8"))
+            self.assertEqual(record["type"], "hard")
+            self.assertEqual(record["detectedAtEpoch"], 1_090)
+            notification.assert_called_once_with(
+                "Hard reset detected: Codex + Work weekly usage reset early "
+                "without using a reset credit."
+            )
+
     def test_manual_reset_is_kept_without_confirmation_delay(self) -> None:
         snapshots = [
             snapshot(1_000, 80, 10_000, reset_credits=1),
@@ -304,6 +388,13 @@ class SvgSerializationTests(unittest.TestCase):
             self.assertLess(target.stat().st_size, meter.SVG_BROWSER_BYTE_LIMIT)
             self.assertEqual(data["last"], 1_030)
             self.assertTrue(data["series"])
+            svg = target.read_text(encoding="utf-8")
+            self.assertIn("Next natural resets", svg)
+            self.assertIn("Codex + Work", svg)
+            self.assertIn("5-hour:", svg)
+            self.assertIn("Weekly:", svg)
+            self.assertNotIn("Codex + Work 5-hour:", svg)
+            self.assertNotIn("Codex + Work weekly:", svg)
 
     def test_atomic_write_replaces_target_and_removes_temporary_file(self) -> None:
         with tempfile.TemporaryDirectory() as temporary_directory:

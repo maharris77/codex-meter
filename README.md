@@ -49,6 +49,11 @@ notification.
 
 ![Example reset-credit notification](docs/example-reset-credit-notification.png)
 
+When the validated weekly history confirms a hard reset, Codex Meter appends
+the event to `~/Documents/Archives/Codex Meter/hard_reset_events.jsonl` and
+sends a macOS notification. It waits for the same confirmation samples used by
+the graph, so a transient placeholder response does not trigger an alert.
+
 When the response includes Codex flexible credits, Codex Meter tracks
 `credits.balance` separately from reset credits. Balance changes are appended to
 `~/Documents/Archives/Codex Meter/flexible_credit_events.jsonl`, and the balance

@@ -27,6 +27,7 @@ LATEST_PATH = OUTPUT_DIR / "latest.json"
 SVG_PATH = OUTPUT_DIR / "usage.svg"
 HTML_PATH = OUTPUT_DIR / "usage.html"
 RESET_CREDIT_EVENTS_PATH = OUTPUT_DIR / "reset_credit_events.jsonl"
+HARD_RESET_EVENTS_PATH = OUTPUT_DIR / "hard_reset_events.jsonl"
 FLEXIBLE_CREDIT_EVENTS_PATH = OUTPUT_DIR / "flexible_credit_events.jsonl"
 SETTINGS_PATH = OUTPUT_DIR / "settings.json"
 APP_SERVER_INITIALIZE_TIMEOUT_SECONDS = 120
@@ -392,6 +393,22 @@ def flexible_credit_change_key(state: dict[str, Any]) -> tuple[float, bool, bool
     )
 
 
+def send_notification(message: str) -> None:
+    subprocess.run(
+        [
+            "/usr/bin/osascript",
+            "-e",
+            (
+                f"display notification {json.dumps(message)} "
+                'with title "Codex Meter"'
+            ),
+        ],
+        check=False,
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+    )
+
+
 def record_reset_credit_change(
     previous_snapshot: dict[str, Any],
     current_snapshot: dict[str, Any],
@@ -410,19 +427,8 @@ def record_reset_credit_change(
         handle.write("\n")
 
     direction = "increased" if current_count > previous_count else "decreased"
-    subprocess.run(
-        [
-            "/usr/bin/osascript",
-            "-e",
-            (
-                'display notification "'
-                f"Reset credits {direction}: {previous_count} to {current_count}"
-                '" with title "Codex Meter"'
-            ),
-        ],
-        check=False,
-        stdout=subprocess.DEVNULL,
-        stderr=subprocess.DEVNULL,
+    send_notification(
+        f"Reset credits {direction}: {previous_count} to {current_count}"
     )
 
 
@@ -1047,6 +1053,77 @@ def collect_weekly_reset_events(
         if timestamp >= RESET_CREDIT_BANKING_INTRO_EPOCH and reset_type == "hard":
             observed_post_banking_hard_reset = True
     return events
+
+
+def recent_codex_weekly_snapshots(
+    snapshots: list[dict[str, Any]],
+) -> list[dict[str, Any]]:
+    required_observations = EARLY_RESET_CONFIRMING_SAMPLES + 2
+    recent: list[dict[str, Any]] = []
+    for snapshot in reversed(snapshots):
+        if _limit_window(snapshot, "codex", "secondary") is None:
+            continue
+        recent.append(snapshot)
+        if len(recent) == required_observations:
+            break
+    recent.reverse()
+    return recent
+
+
+def newly_confirmed_hard_reset_events(
+    previous_snapshots: list[dict[str, Any]],
+    current_snapshot: dict[str, Any],
+) -> list[dict[str, Any]]:
+    previous_recent = recent_codex_weekly_snapshots(previous_snapshots)
+    current_recent = recent_codex_weekly_snapshots(
+        [*previous_recent, current_snapshot]
+    )
+    previous_events = collect_weekly_reset_events(
+        validated_usage_snapshots(previous_recent)
+    )
+    current_events = collect_weekly_reset_events(
+        validated_usage_snapshots(current_recent)
+    )
+    previous_hard_reset_times = {
+        event["timestamp"]
+        for event in previous_events
+        if event["type"] == "hard"
+    }
+    return [
+        event
+        for event in current_events
+        if event["type"] == "hard"
+        and event["timestamp"] not in previous_hard_reset_times
+    ]
+
+
+def record_hard_reset_event(
+    event: dict[str, Any],
+    detected_snapshot: dict[str, Any],
+) -> None:
+    record = {
+        **event,
+        "detectedAt": detected_snapshot["collectedAt"],
+        "detectedAtEpoch": detected_snapshot["collectedAtEpoch"],
+    }
+    with HARD_RESET_EVENTS_PATH.open("a", encoding="utf-8") as handle:
+        handle.write(json.dumps(record, separators=(",", ":"), sort_keys=True))
+        handle.write("\n")
+    send_notification(
+        "Hard reset detected: Codex + Work weekly usage reset early "
+        "without using a reset credit."
+    )
+
+
+def alert_if_hard_reset_detected(
+    previous_snapshots: list[dict[str, Any]],
+    current_snapshot: dict[str, Any],
+) -> None:
+    for event in newly_confirmed_hard_reset_events(
+        previous_snapshots,
+        current_snapshot,
+    ):
+        record_hard_reset_event(event, current_snapshot)
 
 
 def codex_natural_reset_summary(snapshot: dict[str, Any]) -> dict[str, str]:
@@ -2538,23 +2615,29 @@ render();
         "Next natural resets</text>"
     )
     parts.append(
-        f'<text x="{expiry_x}" y="{reset_summary_y + 21}" '
+        f'<text x="{expiry_x}" y="{reset_summary_y + 18}" '
+        'font-family="system-ui, -apple-system, sans-serif" '
+        'font-size="11" font-weight="600" fill="#334155">'
+        'Codex + Work</text>'
+    )
+    parts.append(
+        f'<text x="{expiry_x}" y="{reset_summary_y + 36}" '
         'font-family="system-ui, -apple-system, sans-serif" '
         'font-size="11" fill="#334155">'
-        f'Codex + Work 5-hour: {html.escape(natural_reset_summary["fiveHour"])}</text>'
+        f'5-hour: {html.escape(natural_reset_summary["fiveHour"])}</text>'
     )
     if natural_reset_summary["fiveHourNote"]:
         parts.append(
-            f'<text x="{expiry_x}" y="{reset_summary_y + 35}" '
+            f'<text x="{expiry_x}" y="{reset_summary_y + 50}" '
             'font-family="system-ui, -apple-system, sans-serif" '
             'font-size="10" fill="#64748b">'
             f'{html.escape(natural_reset_summary["fiveHourNote"])}</text>'
         )
     parts.append(
-        f'<text x="{expiry_x}" y="{reset_summary_y + 55}" '
+        f'<text x="{expiry_x}" y="{reset_summary_y + 70}" '
         'font-family="system-ui, -apple-system, sans-serif" '
         'font-size="11" fill="#334155">'
-        f'Codex + Work weekly: {html.escape(natural_reset_summary["weekly"])}</text>'
+        f'Weekly: {html.escape(natural_reset_summary["weekly"])}</text>'
     )
     expiry_y = reset_top
     parts.append(
@@ -3060,13 +3143,16 @@ def summary_lines(result: dict[str, Any]) -> list[str]:
 
 
 def collect_and_render(client: CodexAppServerClient) -> dict[str, Any]:
-    previous_snapshot = load_latest_snapshot()
+    snapshots = load_snapshots() if SNAPSHOTS_PATH.exists() else []
+    previous_snapshot = snapshots[-1] if snapshots else load_latest_snapshot()
     result = client.read_rate_limits()
     snapshot = snapshot_limits(result)
     append_snapshot(snapshot)
     alert_if_reset_credit_count_changed(previous_snapshot, snapshot)
     record_if_flexible_credit_changed(previous_snapshot, snapshot)
-    render_svg(load_snapshots())
+    alert_if_hard_reset_detected(snapshots, snapshot)
+    snapshots.append(snapshot)
+    render_svg(snapshots)
     render_html()
     return result
 
