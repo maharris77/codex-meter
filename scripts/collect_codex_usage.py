@@ -69,13 +69,19 @@ VIEW_PRESET_LABELS = {
     "all": "All data",
     "custom": "Custom range",
 }
+FIVE_HOUR_WINDOW_MINUTES = 300
+WEEKLY_WINDOW_MINUTES = 10080
 WINDOW_LABELS_BY_DURATION_MINS = {
-    300: "5-hour window",
-    10080: "7-day window",
+    FIVE_HOUR_WINDOW_MINUTES: "5-hour window",
+    WEEKLY_WINDOW_MINUTES: "7-day window",
 }
 WINDOW_LABELS_BY_NAME = {
     "primary": "5-hour window",
     "secondary": "7-day window",
+}
+WINDOW_DURATION_MINS_BY_NAME = {
+    "primary": FIVE_HOUR_WINDOW_MINUTES,
+    "secondary": WEEKLY_WINDOW_MINUTES,
 }
 
 
@@ -739,18 +745,46 @@ def _epoch(value: Any) -> int | None:
     return None
 
 
-def _limit_window(
+def _window_by_duration(
+    limit: dict[str, Any],
+    duration_minutes: int,
+) -> tuple[str, dict[str, Any]] | None:
+    for window_name in ("primary", "secondary"):
+        window = limit.get(window_name)
+        if not isinstance(window, dict):
+            continue
+        if _window_duration_minutes(window_name, window) == duration_minutes:
+            return window_name, window
+    return None
+
+
+def _snapshot_window_by_duration(
     snapshot: dict[str, Any],
     limit_id: str,
-    window_name: str,
-) -> dict[str, Any] | None:
+    duration_minutes: int,
+) -> tuple[str, dict[str, Any]] | None:
     limit = limit_snapshots(snapshot["result"]).get(limit_id)
     if not isinstance(limit, dict):
         return None
-    window = limit.get(window_name)
-    if not isinstance(window, dict):
-        return None
-    return window
+    return _window_by_duration(limit, duration_minutes)
+
+
+def _window_identity(
+    limit_id: str,
+    window_name: str,
+    window: dict[str, Any],
+) -> tuple[str, int]:
+    return limit_id, _window_duration_minutes(window_name, window)
+
+
+def _window_duration_minutes(
+    window_name: str,
+    window: dict[str, Any],
+) -> int:
+    duration = window.get("windowDurationMins")
+    if isinstance(duration, (int, float)):
+        return int(duration)
+    return WINDOW_DURATION_MINS_BY_NAME[window_name]
 
 
 def _early_reset_is_confirmed(
@@ -758,17 +792,18 @@ def _early_reset_is_confirmed(
     invalid: set[tuple[int, str, str]],
     index: int,
     limit_id: str,
-    window_name: str,
+    duration_minutes: int,
     reset_at: int,
 ) -> bool:
     confirmations = 0
     for future_index in range(index + 1, len(snapshots)):
-        future_window = _limit_window(
-            snapshots[future_index], limit_id, window_name
+        future_match = _snapshot_window_by_duration(
+            snapshots[future_index], limit_id, duration_minutes
         )
-        if future_window is None:
+        if future_match is None:
             continue
-        if (future_index, limit_id, window_name) in invalid:
+        future_window_name, future_window = future_match
+        if (future_index, limit_id, future_window_name) in invalid:
             return False
         future_reset = _epoch(future_window.get("resetsAt"))
         if (
@@ -786,7 +821,7 @@ def invalid_limit_window_samples(
     snapshots: list[dict[str, Any]],
 ) -> set[tuple[int, str, str]]:
     invalid: set[tuple[int, str, str]] = set()
-    future_min_reset: dict[tuple[str, str], int] = {}
+    future_min_reset: dict[tuple[str, int], int] = {}
 
     # A real next-reset timestamp cannot later move materially backward. Keep
     # the raw snapshot, but exclude any contradicted window from the display.
@@ -801,7 +836,7 @@ def invalid_limit_window_samples(
                 reset_at = _epoch(window.get("resetsAt"))
                 if reset_at is None:
                     continue
-                key = (limit_id, window_name)
+                key = _window_identity(limit_id, window_name, window)
                 future_reset = future_min_reset.get(key)
                 if (
                     future_reset is not None
@@ -816,7 +851,9 @@ def invalid_limit_window_samples(
                     else min(reset_at, future_reset)
                 )
 
-    last_valid_index: dict[tuple[str, str], int] = {}
+    last_valid_sample: dict[
+        tuple[str, int], tuple[int, dict[str, Any]]
+    ] = {}
     for index, snapshot in enumerate(snapshots):
         current_collected = _epoch(snapshot.get("collectedAtEpoch"))
         for limit_id, limit in limit_snapshots(snapshot["result"]).items():
@@ -827,17 +864,12 @@ def invalid_limit_window_samples(
                 current_window = limit.get(window_name)
                 if not isinstance(current_window, dict):
                     continue
-                key = (limit_id, window_name)
-                previous_index = last_valid_index.get(key)
-                if previous_index is None:
-                    last_valid_index[key] = index
+                key = _window_identity(limit_id, window_name, current_window)
+                previous_sample = last_valid_sample.get(key)
+                if previous_sample is None:
+                    last_valid_sample[key] = (index, current_window)
                     continue
-                previous_window = _limit_window(
-                    snapshots[previous_index], limit_id, window_name
-                )
-                if previous_window is None:
-                    last_valid_index[key] = index
-                    continue
+                previous_index, previous_window = previous_sample
 
                 previous_reset = _epoch(previous_window.get("resetsAt"))
                 current_reset = _epoch(current_window.get("resetsAt"))
@@ -850,7 +882,7 @@ def invalid_limit_window_samples(
                     or previous_used is None
                     or current_used is None
                 ):
-                    last_valid_index[key] = index
+                    last_valid_sample[key] = (index, current_window)
                     continue
 
                 early_reset_candidate = (
@@ -861,7 +893,7 @@ def invalid_limit_window_samples(
                     < previous_reset
                 )
                 if not early_reset_candidate:
-                    last_valid_index[key] = index
+                    last_valid_sample[key] = (index, current_window)
                     continue
 
                 previous_count = reset_credit_count(snapshots[previous_index])
@@ -877,10 +909,10 @@ def invalid_limit_window_samples(
                     invalid,
                     index,
                     limit_id,
-                    window_name,
+                    key[1],
                     current_reset,
                 ):
-                    last_valid_index[key] = index
+                    last_valid_sample[key] = (index, current_window)
                     continue
                 invalid.add(sample_key)
 
@@ -891,7 +923,7 @@ def validated_usage_snapshots(
     snapshots: list[dict[str, Any]],
 ) -> list[dict[str, Any]]:
     invalid = invalid_limit_window_samples(snapshots)
-    last_valid_window: dict[tuple[str, str], dict[str, Any]] = {}
+    last_valid_window: dict[tuple[str, int], dict[str, Any]] = {}
     validated: list[dict[str, Any]] = []
 
     for index, snapshot in enumerate(snapshots):
@@ -901,7 +933,7 @@ def validated_usage_snapshots(
                 window = limit.get(window_name)
                 if not isinstance(window, dict):
                     continue
-                key = (limit_id, window_name)
+                key = _window_identity(limit_id, window_name, window)
                 if (index, limit_id, window_name) not in invalid:
                     last_valid_window[key] = window
                     continue
@@ -1016,12 +1048,14 @@ def collect_weekly_reset_events(
             current_limit, dict
         ):
             continue
-        previous_window = previous_limit.get("secondary")
-        current_window = current_limit.get("secondary")
-        if not isinstance(previous_window, dict) or not isinstance(
-            current_window, dict
-        ):
+        previous_match = _window_by_duration(
+            previous_limit, WEEKLY_WINDOW_MINUTES
+        )
+        current_match = _window_by_duration(current_limit, WEEKLY_WINDOW_MINUTES)
+        if previous_match is None or current_match is None:
             continue
+        _, previous_window = previous_match
+        _, current_window = current_match
         reset_type = classify_weekly_reset(
             previous_snapshot,
             current_snapshot,
@@ -1061,7 +1095,12 @@ def recent_codex_weekly_snapshots(
     required_observations = EARLY_RESET_CONFIRMING_SAMPLES + 2
     recent: list[dict[str, Any]] = []
     for snapshot in reversed(snapshots):
-        if _limit_window(snapshot, "codex", "secondary") is None:
+        if (
+            _snapshot_window_by_duration(
+                snapshot, "codex", WEEKLY_WINDOW_MINUTES
+            )
+            is None
+        ):
             continue
         recent.append(snapshot)
         if len(recent) == required_observations:
@@ -1135,22 +1174,42 @@ def codex_natural_reset_summary(snapshot: dict[str, Any]) -> dict[str, str]:
             "fiveHourNote": "",
         }
 
-    primary_reset = _epoch((codex_limit.get("primary") or {}).get("resetsAt"))
-    weekly_reset = _epoch((codex_limit.get("secondary") or {}).get("resetsAt"))
-    effective_primary_reset = primary_reset
+    five_hour_match = _window_by_duration(
+        codex_limit, FIVE_HOUR_WINDOW_MINUTES
+    )
+    weekly_match = _window_by_duration(codex_limit, WEEKLY_WINDOW_MINUTES)
+    five_hour_reset = (
+        _epoch(five_hour_match[1].get("resetsAt"))
+        if five_hour_match is not None
+        else None
+    )
+    weekly_reset = (
+        _epoch(weekly_match[1].get("resetsAt"))
+        if weekly_match is not None
+        else None
+    )
+    effective_five_hour_reset = five_hour_reset
     five_hour_note = ""
-    if weekly_reset is not None and (
-        primary_reset is None or weekly_reset < primary_reset
+    if (
+        five_hour_reset is not None
+        and weekly_reset is not None
+        and weekly_reset < five_hour_reset
     ):
-        effective_primary_reset = weekly_reset
+        effective_five_hour_reset = weekly_reset
         five_hour_note = "with weekly reset"
     collected_at = int(snapshot["collectedAtEpoch"])
 
     return {
-        "fiveHour": format_epoch_with_countdown(
-            effective_primary_reset, collected_at
+        "fiveHour": (
+            format_epoch_with_countdown(effective_five_hour_reset, collected_at)
+            if five_hour_match is not None
+            else "not currently reported"
         ),
-        "weekly": format_epoch_with_countdown(weekly_reset, collected_at),
+        "weekly": (
+            format_epoch_with_countdown(weekly_reset, collected_at)
+            if weekly_match is not None
+            else "not currently reported"
+        ),
         "fiveHourNote": five_hour_note,
     }
 
@@ -1829,7 +1888,12 @@ function renderSeries(range) {
       (point) => active && point.timestamp >= range.start && point.timestamp <= range.end
     );
     const latestPoint = series.points.length ? series.points[series.points.length - 1] : null;
-    if (active && latestPoint && Number.isFinite(latestPoint.percent)) {
+    if (
+      active &&
+      latestPoint &&
+      latestPoint.timestamp === usageData.last &&
+      Number.isFinite(latestPoint.percent)
+    ) {
       currentValueLabels.push({
         series,
         point: latestPoint,

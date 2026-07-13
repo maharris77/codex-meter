@@ -77,6 +77,16 @@ def snapshot(
     }
 
 
+def move_weekly_windows_to_primary(
+    usage_snapshot: dict[str, object],
+) -> dict[str, object]:
+    limits_by_id = usage_snapshot["result"]["rateLimitsByLimitId"]
+    for limit_snapshot in limits_by_id.values():
+        limit_snapshot["primary"] = limit_snapshot["secondary"]
+        limit_snapshot["secondary"] = None
+    return usage_snapshot
+
+
 class UsageSnapshotValidationTests(unittest.TestCase):
     def test_main_limit_label_includes_work(self) -> None:
         codex = limit("codex", None, 10, 9_000, 49, 10_000)
@@ -267,6 +277,58 @@ class UsageSnapshotValidationTests(unittest.TestCase):
 
         self.assertEqual(meter.collect_weekly_reset_events(validated), [])
 
+    def test_weekly_window_remains_identified_after_moving_to_primary(self) -> None:
+        snapshots = [
+            snapshot(1_000, 80, 10_000),
+            move_weekly_windows_to_primary(snapshot(1_030, 0, 70_000)),
+            move_weekly_windows_to_primary(snapshot(1_060, 0, 70_000)),
+            move_weekly_windows_to_primary(snapshot(1_090, 1, 70_000)),
+        ]
+
+        validated = meter.validated_usage_snapshots(snapshots)
+        events = meter.collect_weekly_reset_events(validated)
+
+        self.assertEqual(
+            validated[-1]["result"]["rateLimitsByLimitId"]["codex"][
+                "primary"
+            ]["windowDurationMins"],
+            meter.WEEKLY_WINDOW_MINUTES,
+        )
+        self.assertEqual([event["type"] for event in events], ["hard"])
+
+    def test_reset_summary_reports_current_window_durations(self) -> None:
+        current = move_weekly_windows_to_primary(
+            snapshot(1_000, 54, 70_000)
+        )
+
+        summary = meter.codex_natural_reset_summary(current)
+
+        self.assertEqual(summary["fiveHour"], "not currently reported")
+        self.assertEqual(
+            summary["weekly"],
+            meter.format_epoch_with_countdown(70_000, 1_000),
+        )
+        self.assertEqual(summary["fiveHourNote"], "")
+
+    def test_removed_window_is_historical_not_current(self) -> None:
+        snapshots = [
+            snapshot(1_000, 49, 10_000),
+            move_weekly_windows_to_primary(snapshot(1_030, 50, 10_000)),
+        ]
+
+        series = meter.collect_series(
+            meter.validated_usage_snapshots(snapshots)
+        )
+
+        self.assertEqual(
+            series["Codex + Work 5-hour window"][-1][0],
+            1_000,
+        )
+        self.assertEqual(
+            series["Codex + Work 7-day window"][-1],
+            (1_030, 50.0),
+        )
+
 
 class CodexAppServerClientTests(unittest.TestCase):
     def test_reuses_one_process_for_multiple_rate_limit_reads(self) -> None:
@@ -395,6 +457,10 @@ class SvgSerializationTests(unittest.TestCase):
             self.assertIn("Weekly:", svg)
             self.assertNotIn("Codex + Work 5-hour:", svg)
             self.assertNotIn("Codex + Work weekly:", svg)
+            self.assertIn(
+                "latestPoint.timestamp === usageData.last",
+                svg,
+            )
 
     def test_atomic_write_replaces_target_and_removes_temporary_file(self) -> None:
         with tempfile.TemporaryDirectory() as temporary_directory:
