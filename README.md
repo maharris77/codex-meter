@@ -11,18 +11,18 @@ to pan that window through older history, toggle individual usage-limit lines,
 hide supplemental graphs, and hover over plotted dots for details.
 
 ChatGPT already shows current usage. This tool keeps a local timeline so you can
-see how each returned limit changes over time, including the shared 5-hour and
-7-day usage windows and their exact reset timestamps.
+see how each returned limit changes over time, including each window's exact
+duration and reset timestamp.
 
 ## Why Use It
 
 Codex Meter is most useful when Codex threads, delegated workers, or ChatGPT
 Work tasks are doing sustained work and current usage needs to guide scheduling.
 
-- Front-load fresh 5-hour windows while there is room, then taper only when the
-  local meter is genuinely close to the breaker.
-- Keep long-running goals from hitting a 5-hour cap and then sitting idle after
-  the next reset.
+- Use each currently reported quota window while there is room, then taper only
+  when the local meter is genuinely close to the breaker.
+- Keep long-running goals from hitting a reported cap and then sitting idle
+  after the next reset.
 - Use weekly quota intentionally, including deciding when to keep a run going
   after a weekly cap is reached so in-flight work can finish.
 - Plan work and ETAs from observed reset times, usage slopes, reset-credit
@@ -92,13 +92,15 @@ is plotted as a separate flexible-credit graph below the reset-credit graph.
   later count changes over the selected time range.
 - Flexible credit balance is shown in a separate lower graph. It is not a reset
   credit count.
-- The graph estimates reset-credit expirations using Codex's 30-day expiration
-  rule. Expiration labels appear inside the reset-credit strip just left of each
-  visible credit-count change and the present edge, with older credits above
-  newer credits.
-- A separate table shows the current available-credit expiration estimate.
-  Credits already present when local tracking first observed reset-credit data
-  are labeled with uncertain expiration dates.
+- When the app-server supplies detailed reset-credit rows, the graph uses each
+  credit's reported grant and expiration timestamps. Expiration labels appear
+  inside the reset-credit strip just left of each visible credit-count change
+  and the present edge, with older credits above newer credits.
+- Older snapshots recorded only an available count. For that portion of local
+  history, the graph reconstructs 30-day expiration estimates. Credits already
+  present when tracking first observed a count retain uncertain dates.
+- A separate table identifies whether each current expiration is reported by
+  ChatGPT or reconstructed from local snapshots.
 
 ### Reset Labels And Timing
 
@@ -124,9 +126,12 @@ is plotted as a separate flexible-credit graph below the reset-credit graph.
 - Usage series use colorblind-friendlier colors and distinct line styles so
   color is not the only cue.
 - The right side of the graph shows the shared Codex + Work bucket's next
-  natural 5-hour and weekly reset times. If the weekly reset is due before the
-  5-hour reset, the 5-hour line uses the weekly reset time because local history
-  shows the 5-hour window resets with that weekly reset.
+  natural 5-hour and weekly reset times when those durations are currently
+  reported. A duration absent from the latest response is shown as `not
+  currently reported`; its older points remain available as history. If both
+  durations are present and the weekly reset is due first, the 5-hour line uses
+  the weekly reset time because local history shows the 5-hour window resets
+  with that weekly reset.
 - This reset summary is only for the main shared limit. Spark remains a
   separate graphed series.
 
@@ -134,7 +139,7 @@ is plotted as a separate flexible-credit graph below the reset-credit graph.
 
 - macOS only.
 - Uses the Codex app-server bundled inside the current ChatGPT desktop app.
-- Tested on ChatGPT.app `26.707.31428` (`com.openai.codex`) with its bundled
+- Tested on ChatGPT.app `26.707.61608` (`com.openai.codex`) with its bundled
   `codex-cli 0.144.0-alpha.4`.
 - The main `codex` bucket is shared by Codex and Work. Codex Meter records the
   combined quota but cannot attribute each percentage point to one mode.

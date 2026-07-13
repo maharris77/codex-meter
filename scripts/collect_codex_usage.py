@@ -354,6 +354,22 @@ def reset_credit_count(snapshot: dict[str, Any] | None) -> int | None:
     return None
 
 
+def reset_credit_records(
+    snapshot: dict[str, Any],
+) -> list[dict[str, Any]] | None:
+    reset_credits = snapshot.get("result", {}).get("rateLimitResetCredits")
+    if not isinstance(reset_credits, dict):
+        return None
+    credits = reset_credits.get("credits")
+    if not isinstance(credits, list):
+        return None
+    return [
+        credit
+        for credit in credits
+        if isinstance(credit, dict) and credit.get("status") == "available"
+    ]
+
+
 def flexible_credit_state(snapshot: dict[str, Any] | None) -> dict[str, Any] | None:
     if snapshot is None:
         return None
@@ -661,6 +677,7 @@ def collect_reset_credit_expiration_anchors(
 ) -> list[dict[str, Any]]:
     lots: list[dict[str, Any]] = []
     previous_count: int | None = None
+    previous_lot_signature: tuple[tuple[Any, ...], ...] | None = None
     last_timestamp: int | None = None
     anchors: list[dict[str, Any]] = []
     expiration_seconds = RESET_CREDIT_EXPIRATION_DAYS * 24 * 60 * 60
@@ -669,13 +686,26 @@ def collect_reset_credit_expiration_anchors(
         return [
             {
                 "position": index,
+                "addedLabel": lot["addedLabel"],
                 "addedAtText": lot["addedAtText"],
                 "expiresAtText": lot["expiresAtText"],
                 "expiresLabel": lot["expiresLabel"],
+                "source": lot["source"],
                 "uncertain": lot["uncertain"],
             }
             for index, lot in enumerate(lots, start=1)
         ]
+
+    def lot_signature() -> tuple[tuple[Any, ...], ...]:
+        return tuple(
+            (
+                lot.get("creditId"),
+                lot["addedAtEpoch"],
+                lot["expiresAtEpoch"],
+                lot["source"],
+            )
+            for lot in lots
+        )
 
     def add_anchor(timestamp: int) -> None:
         if not lots:
@@ -690,41 +720,77 @@ def collect_reset_credit_expiration_anchors(
 
     for snapshot in snapshots:
         count = reset_credit_count(snapshot)
-        if count is None:
+        records = reset_credit_records(snapshot)
+        if count is None and records is None:
             continue
         timestamp = int(snapshot["collectedAtEpoch"])
         last_timestamp = timestamp
-        if previous_count is None:
+        if records is not None:
+            lots = []
+            for record in sorted(
+                records,
+                key=lambda credit: (
+                    int(credit["expiresAt"]),
+                    int(credit["grantedAt"]),
+                    str(credit["id"]),
+                ),
+            ):
+                granted_at = int(record["grantedAt"])
+                expires_at = int(record["expiresAt"])
+                lots.append(
+                    {
+                        "creditId": str(record["id"]),
+                        "addedAtEpoch": granted_at,
+                        "addedLabel": "granted",
+                        "addedAtText": format_epoch_local(granted_at),
+                        "expiresAtEpoch": expires_at,
+                        "expiresAtText": format_epoch_local(expires_at),
+                        "expiresLabel": (
+                            f"expires {format_epoch_local_date(expires_at)}"
+                        ),
+                        "source": "reported",
+                        "uncertain": False,
+                    }
+                )
+            previous_count = len(lots)
+        elif previous_count is None:
             lots = [
                 {
                     "addedAtEpoch": None,
-                    "addedAtText": "already held when first observed",
+                    "addedLabel": "first observed",
+                    "addedAtText": format_epoch_local(timestamp),
                     "expiresAtEpoch": None,
                     "expiresAtText": "uncertain",
                     "expiresLabel": "expires uncertain",
+                    "source": "uncertain",
                     "uncertain": True,
                 }
                 for _ in range(count)
             ]
-            add_anchor(timestamp)
         elif count > previous_count:
             for _ in range(count - previous_count):
                 expires_at = timestamp + expiration_seconds
                 lots.append(
                     {
                         "addedAtEpoch": timestamp,
+                        "addedLabel": "observed",
                         "addedAtText": format_epoch_local(timestamp),
                         "expiresAtEpoch": expires_at,
                         "expiresAtText": format_epoch_local(expires_at),
                         "expiresLabel": f"expires {format_epoch_local_date(expires_at)}",
+                        "source": "estimated",
                         "uncertain": False,
                     }
                 )
-            add_anchor(timestamp)
         elif count < previous_count:
             lots = lots[previous_count - count :]
+        if records is None:
+            previous_count = count
+
+        current_lot_signature = lot_signature()
+        if current_lot_signature != previous_lot_signature:
             add_anchor(timestamp)
-        previous_count = count
+            previous_lot_signature = current_lot_signature
 
     if last_timestamp is not None and (
         not anchors or anchors[-1]["timestamp"] != last_timestamp
@@ -1313,6 +1379,15 @@ def render_svg(snapshots: list[dict[str, Any]]) -> None:
         reset_credit_expiration_anchors[-1]["lots"]
         if reset_credit_expiration_anchors
         else []
+    )
+    reset_credit_expiration_basis = (
+        "Reported by ChatGPT"
+        if reset_credit_expiration_rows
+        and all(
+            row["source"] == "reported"
+            for row in reset_credit_expiration_rows
+        )
+        else "Estimated from local snapshots"
     )
     natural_reset_summary = codex_natural_reset_summary(usage_snapshots[-1])
     weekly_reset_events = collect_weekly_reset_events(usage_snapshots)
@@ -2261,7 +2336,12 @@ function renderResetCreditExpirationLabels(layer, range, maxCount) {
       }
       placedLabels.push({ x: labelX, y });
       const title = svgElement("title");
-      title.textContent = `${lot.expiresLabel} - added ${lot.addedAtText} - ${lot.uncertain ? "uncertain date" : "Current estimate based on 30-day expiration"}`;
+      const expirationBasis = lot.source === "reported"
+        ? "reported by ChatGPT"
+        : lot.uncertain
+          ? "uncertain date"
+          : "estimated from the 30-day expiration rule";
+      title.textContent = `${lot.expiresLabel} - ${lot.addedLabel} ${lot.addedAtText} - ${expirationBasis}`;
       const text = svgElement("text", {
         class: "reset-expiration-label",
         x: labelX.toFixed(2),
@@ -2714,11 +2794,12 @@ render();
         parts.append(
             f'<text class="reset-graph-section" x="{expiry_x}" y="{expiry_y + 18}" '
             'font-family="system-ui, -apple-system, sans-serif" '
-            'font-size="10" fill="#64748b">Current estimate based on 30-day expiration</text>'
+            f'font-size="10" fill="#64748b">{html.escape(reset_credit_expiration_basis)}</text>'
         )
         for index, row in enumerate(reset_credit_expiration_rows, start=1):
             row_y = expiry_y + 18 + index * 28
             expires_at = html.escape(str(row["expiresAtText"]))
+            added_label = html.escape(str(row["addedLabel"]))
             added_at = html.escape(str(row["addedAtText"]))
             uncertainty = " (uncertain date)" if row["uncertain"] else ""
             parts.append(
@@ -2731,7 +2812,7 @@ render();
                 f'<text class="reset-graph-section" x="{expiry_x}" y="{row_y + 13}" '
                 'font-family="system-ui, -apple-system, sans-serif" '
                 'font-size="10" fill="#64748b">'
-                f'added: {added_at}</text>'
+                f'{added_label}: {added_at}</text>'
             )
     else:
         parts.append(

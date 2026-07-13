@@ -2,6 +2,26 @@
 
 Date: 2026-05-19
 
+## 2026-07-13 Rate-Limit Window And Reset-Credit Audit
+
+- The live `account/rateLimits/read` response moved the 10,080-minute Codex +
+  Work weekly window from `secondary` to `primary` and stopped returning a
+  300-minute window. Spark had the same slot shape. Slot names therefore cannot
+  be treated as window identities; `windowDurationMins` is authoritative.
+- Historical 5-hour samples remain valid history, but they are not current when
+  the latest response omits that duration. Current-value labels and natural
+  reset summaries now require a window to exist in the latest snapshot.
+- Detailed available-credit rows now include `id`, `grantedAt`, `expiresAt`,
+  `status`, `resetType`, and display text. Codex Meter uses the reported grant
+  and expiration timestamps for current credits instead of estimating them
+  from the first sample that observed a count increase.
+- Older snapshots without detailed credit rows still require local
+  reconstruction. Once detailed rows appear, they replace the reconstructed
+  current-credit state rather than being combined with it.
+- The public changelog and the account's active workspace-message response did
+  not establish whether removal of the 300-minute window is temporary. Codex
+  Meter therefore reports only what the current response contains.
+
 ## 2026-07-09 ChatGPT Desktop Compatibility Audit
 
 - OpenAI moved Codex into the ChatGPT desktop app while stating that existing

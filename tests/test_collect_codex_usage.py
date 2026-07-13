@@ -87,6 +87,29 @@ def move_weekly_windows_to_primary(
     return usage_snapshot
 
 
+def add_exact_reset_credit(
+    usage_snapshot: dict[str, object],
+    *,
+    credit_id: str,
+    granted_at: int,
+    expires_at: int,
+) -> dict[str, object]:
+    usage_snapshot["result"]["rateLimitResetCredits"] = {
+        "availableCount": 1,
+        "credits": [
+            {
+                "id": credit_id,
+                "grantedAt": granted_at,
+                "expiresAt": expires_at,
+                "resetType": "codexRateLimits",
+                "status": "available",
+                "title": "Full reset",
+            }
+        ],
+    }
+    return usage_snapshot
+
+
 class UsageSnapshotValidationTests(unittest.TestCase):
     def test_main_limit_label_includes_work(self) -> None:
         codex = limit("codex", None, 10, 9_000, 49, 10_000)
@@ -375,6 +398,38 @@ class CodexAppServerClientTests(unittest.TestCase):
 
 
 class SvgSerializationTests(unittest.TestCase):
+    def test_exact_reset_credit_record_replaces_local_expiration_estimate(
+        self,
+    ) -> None:
+        snapshots = [
+            snapshot(1_000, 49, 10_000, reset_credits=1),
+            add_exact_reset_credit(
+                snapshot(1_030, 50, 10_000, reset_credits=1),
+                credit_id="credit-1",
+                granted_at=900,
+                expires_at=2_000,
+            ),
+        ]
+
+        anchors = meter.collect_reset_credit_expiration_anchors(snapshots)
+
+        self.assertEqual(
+            anchors[-1]["lots"],
+            [
+                {
+                    "position": 1,
+                    "addedLabel": "granted",
+                    "addedAtText": meter.format_epoch_local(900),
+                    "expiresAtText": meter.format_epoch_local(2_000),
+                    "expiresLabel": (
+                        f"expires {meter.format_epoch_local_date(2_000)}"
+                    ),
+                    "source": "reported",
+                    "uncertain": False,
+                }
+            ],
+        )
+
     def test_embedded_data_is_compressed_and_round_trips(self) -> None:
         data = "a" * 100_000 + "]]><tag>&value" + "b" * 100_000
 
@@ -423,7 +478,12 @@ class SvgSerializationTests(unittest.TestCase):
             target = Path(temporary_directory) / "usage.svg"
             snapshots = [
                 snapshot(1_000, 49, 10_000),
-                snapshot(1_030, 50, 10_000),
+                add_exact_reset_credit(
+                    snapshot(1_030, 50, 10_000, reset_credits=1),
+                    credit_id="credit-1",
+                    granted_at=900,
+                    expires_at=2_000,
+                ),
             ]
 
             with (
@@ -457,6 +517,8 @@ class SvgSerializationTests(unittest.TestCase):
             self.assertIn("Weekly:", svg)
             self.assertNotIn("Codex + Work 5-hour:", svg)
             self.assertNotIn("Codex + Work weekly:", svg)
+            self.assertIn("Reported by ChatGPT", svg)
+            self.assertIn("granted:", svg)
             self.assertIn(
                 "latestPoint.timestamp === usageData.last",
                 svg,
