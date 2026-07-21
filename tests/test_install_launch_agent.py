@@ -11,6 +11,12 @@ import install_launch_agent as installer
 
 
 class LaunchAgentTests(unittest.TestCase):
+    def test_live_state_is_outside_icloud_documents(self) -> None:
+        self.assertEqual(
+            installer.OUTPUT_DIR,
+            Path.home() / "Library" / "Application Support" / "Codex Meter",
+        )
+
     def test_persistent_collector_receives_sampling_interval(self) -> None:
         plist = installer.build_plist(30)
 

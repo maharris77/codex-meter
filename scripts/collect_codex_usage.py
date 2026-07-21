@@ -21,7 +21,7 @@ from pathlib import Path
 from typing import Any
 
 
-OUTPUT_DIR = Path.home() / "Documents" / "Archives" / "Codex Meter"
+OUTPUT_DIR = Path.home() / "Library" / "Application Support" / "Codex Meter"
 SNAPSHOTS_PATH = OUTPUT_DIR / "snapshots.jsonl"
 LATEST_PATH = OUTPUT_DIR / "latest.json"
 SVG_PATH = OUTPUT_DIR / "usage.svg"
@@ -3287,8 +3287,10 @@ def summary_lines(result: dict[str, Any]) -> list[str]:
     return lines
 
 
-def collect_and_render(client: CodexAppServerClient) -> dict[str, Any]:
-    snapshots = load_snapshots() if SNAPSHOTS_PATH.exists() else []
+def collect_and_render(
+    client: CodexAppServerClient,
+    snapshots: list[dict[str, Any]],
+) -> dict[str, Any]:
     previous_snapshot = snapshots[-1] if snapshots else load_latest_snapshot()
     result = client.read_rate_limits()
     snapshot = snapshot_limits(result)
@@ -3300,6 +3302,17 @@ def collect_and_render(client: CodexAppServerClient) -> dict[str, Any]:
     render_svg(snapshots)
     render_html()
     return result
+
+
+def next_collection_delay(
+    previous_deadline: float,
+    interval_seconds: int,
+    now: float,
+) -> tuple[float, float]:
+    next_deadline = previous_deadline + interval_seconds
+    if next_deadline <= now:
+        return 0.0, now
+    return next_deadline - now, next_deadline
 
 
 def positive_interval_seconds(value: str) -> int:
@@ -3331,17 +3344,22 @@ def stop_on_sigterm(_signum: int, _frame: object) -> None:
 def main() -> None:
     arguments = parse_arguments(sys.argv[1:])
     signal.signal(signal.SIGTERM, stop_on_sigterm)
+    snapshots = load_snapshots() if SNAPSHOTS_PATH.exists() else []
 
     with CodexAppServerClient() as client:
         if arguments.interval_seconds is None:
-            result = collect_and_render(client)
+            result = collect_and_render(client, snapshots)
         else:
+            deadline = time.monotonic()
             while True:
-                cycle_started = time.monotonic()
-                collect_and_render(client)
-                elapsed = time.monotonic() - cycle_started
-                delay = arguments.interval_seconds - elapsed
-                time.sleep(delay if delay > 0 else arguments.interval_seconds)
+                collect_and_render(client, snapshots)
+                delay, deadline = next_collection_delay(
+                    deadline,
+                    arguments.interval_seconds,
+                    time.monotonic(),
+                )
+                if delay > 0:
+                    time.sleep(delay)
 
     if arguments.interval_seconds is None and sys.stdout.isatty():
         print(f"Wrote {SNAPSHOTS_PATH}")

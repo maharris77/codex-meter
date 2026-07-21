@@ -547,6 +547,46 @@ class SvgSerializationTests(unittest.TestCase):
 
             self.assertEqual(target.stat().st_mode & 0o777, 0o644)
 
+    def test_persistent_collection_reuses_loaded_history(self) -> None:
+        snapshots = [snapshot(1_000, 49, 10_000)]
+        responses = [
+            snapshot(1_030, 50, 10_000)["result"],
+            snapshot(1_060, 51, 10_000)["result"],
+        ]
+
+        class Client:
+            def read_rate_limits(self) -> dict[str, object]:
+                return responses.pop(0)
+
+        with (
+            mock.patch.object(meter, "load_snapshots") as load_snapshots,
+            mock.patch.object(meter, "append_snapshot"),
+            mock.patch.object(meter, "alert_if_reset_credit_count_changed"),
+            mock.patch.object(meter, "record_if_flexible_credit_changed"),
+            mock.patch.object(meter, "alert_if_hard_reset_detected"),
+            mock.patch.object(meter, "render_svg") as render_svg,
+            mock.patch.object(meter, "render_html"),
+        ):
+            meter.collect_and_render(Client(), snapshots)
+            meter.collect_and_render(Client(), snapshots)
+
+        load_snapshots.assert_not_called()
+        self.assertEqual(len(snapshots), 3)
+        self.assertIs(render_svg.call_args_list[0].args[0], snapshots)
+        self.assertIs(render_svg.call_args_list[1].args[0], snapshots)
+
+    def test_collection_overrun_does_not_add_another_interval(self) -> None:
+        delay, deadline = meter.next_collection_delay(100.0, 30, 145.0)
+
+        self.assertEqual(delay, 0.0)
+        self.assertEqual(deadline, 145.0)
+
+    def test_collection_waits_for_the_next_deadline_when_ahead(self) -> None:
+        delay, deadline = meter.next_collection_delay(100.0, 30, 112.0)
+
+        self.assertEqual(delay, 18.0)
+        self.assertEqual(deadline, 130.0)
+
 
 if __name__ == "__main__":
     unittest.main()

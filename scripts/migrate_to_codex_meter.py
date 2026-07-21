@@ -5,6 +5,8 @@ from __future__ import annotations
 
 import json
 import os
+import shutil
+import stat
 import subprocess
 from pathlib import Path
 from typing import Any
@@ -13,19 +15,36 @@ import collect_codex_usage
 
 
 OLD_DIR = Path.home() / "Documents" / "Archives" / "Codex Usage Tracker"
+ARCHIVE_DIR = Path.home() / "Documents" / "Archives" / "Codex Meter"
 NEW_DIR = collect_codex_usage.OUTPUT_DIR
 OLD_SNAPSHOTS_PATH = OLD_DIR / "snapshots.jsonl"
+ARCHIVE_SNAPSHOTS_PATH = ARCHIVE_DIR / "snapshots.jsonl"
 NEW_SNAPSHOTS_PATH = collect_codex_usage.SNAPSHOTS_PATH
 NEW_LATEST_PATH = collect_codex_usage.LATEST_PATH
+SUPPORT_FILENAMES = (
+    "settings.json",
+    "reset_credit_events.jsonl",
+    "hard_reset_events.jsonl",
+    "flexible_credit_events.jsonl",
+)
 LEGACY_LABELS = (
     "com.mahos.codex-usage-tracker",
     "com.mahos.codex-meter",
 )
 
 
+def require_materialized(source: Path) -> None:
+    if source.stat().st_flags & stat.SF_DATALESS:
+        raise RuntimeError(
+            f"{source} is stored only in iCloud. In Finder, select the file "
+            "and choose Download Now, then run the installer again."
+        )
+
+
 def load_jsonl(path: Path) -> list[dict[str, Any]]:
     if not path.exists():
         return []
+    require_materialized(path)
 
     rows: list[dict[str, Any]] = []
     with path.open("r", encoding="utf-8") as handle:
@@ -46,8 +65,14 @@ def snapshot_key(snapshot: dict[str, Any]) -> tuple[int, str, str]:
 
 def merged_snapshots() -> list[dict[str, Any]]:
     snapshots: dict[tuple[int, str, str], dict[str, Any]] = {}
-    for snapshot in [*load_jsonl(OLD_SNAPSHOTS_PATH), *load_jsonl(NEW_SNAPSHOTS_PATH)]:
-        snapshots[snapshot_key(snapshot)] = snapshot
+    sources = (
+        OLD_SNAPSHOTS_PATH,
+        ARCHIVE_SNAPSHOTS_PATH,
+        NEW_SNAPSHOTS_PATH,
+    )
+    for source in sources:
+        for snapshot in load_jsonl(source):
+            snapshots[snapshot_key(snapshot)] = snapshot
     return [snapshots[key] for key in sorted(snapshots)]
 
 
@@ -65,9 +90,19 @@ def write_jsonl(path: Path, rows: list[dict[str, Any]]) -> None:
             handle.write("\n")
 
 
+def migrate_support_files() -> None:
+    for filename in SUPPORT_FILENAMES:
+        source = ARCHIVE_DIR / filename
+        destination = NEW_DIR / filename
+        if source.exists() and not destination.exists():
+            require_materialized(source)
+            shutil.copy2(source, destination)
+
+
 def migrate_data() -> dict[str, int]:
     rows = merged_snapshots()
     prepare_output_dir()
+    migrate_support_files()
     if not rows:
         return {"snapshot_count": 0}
 
@@ -77,6 +112,7 @@ def migrate_data() -> dict[str, int]:
         json.dumps(rows[-1], indent=2, sort_keys=True),
     )
     collect_codex_usage.render_svg(rows)
+    collect_codex_usage.render_html()
     return {"snapshot_count": len(rows)}
 
 

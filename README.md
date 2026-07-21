@@ -35,36 +35,38 @@ Work tasks are doing sustained work and current usage needs to guide scheduling.
 The collector starts the Codex app-server bundled inside the ChatGPT desktop
 app, calls `account/rateLimits/read`, and writes local files:
 
-- `~/Documents/Archives/Codex Meter/snapshots.jsonl`
-- `~/Documents/Archives/Codex Meter/latest.json`
-- `~/Documents/Archives/Codex Meter/usage.html`
-- `~/Documents/Archives/Codex Meter/usage.svg`
-- `~/Documents/Archives/Codex Meter/settings.json`
+- `~/Library/Application Support/Codex Meter/snapshots.jsonl`
+- `~/Library/Application Support/Codex Meter/latest.json`
+- `~/Library/Application Support/Codex Meter/usage.html`
+- `~/Library/Application Support/Codex Meter/usage.svg`
+- `~/Library/Application Support/Codex Meter/settings.json`
 
 When the app-server response includes reset credits, the collector also watches
 `rateLimitResetCredits.availableCount`. If that count changes from the previous
 snapshot, Codex Meter appends an event to
-`~/Documents/Archives/Codex Meter/reset_credit_events.jsonl` and sends a macOS
-notification.
+`~/Library/Application Support/Codex Meter/reset_credit_events.jsonl` and sends
+a macOS notification.
 
 ![Example reset-credit notification](docs/example-reset-credit-notification.png)
 
 When the validated weekly history confirms a hard reset, Codex Meter appends
-the event to `~/Documents/Archives/Codex Meter/hard_reset_events.jsonl` and
-sends a macOS notification. It waits for the same confirmation samples used by
-the graph, so a transient placeholder response does not trigger an alert.
+the event to
+`~/Library/Application Support/Codex Meter/hard_reset_events.jsonl` and sends a
+macOS notification. It waits for the same confirmation samples used by the
+graph, so a transient placeholder response does not trigger an alert.
 
 When the response includes Codex flexible credits, Codex Meter tracks
 `credits.balance` separately from reset credits. Balance changes are appended to
-`~/Documents/Archives/Codex Meter/flexible_credit_events.jsonl`, and the balance
-is plotted as a separate flexible-credit graph below the reset-credit graph.
+`~/Library/Application Support/Codex Meter/flexible_credit_events.jsonl`, and
+the balance is plotted as a separate flexible-credit graph below the
+reset-credit graph.
 
 ### Graph Controls
 
 - The browser graph defaults to the past 7 days. To change the local default, set
   `defaultViewPreset` in
-  `~/Documents/Archives/Codex Meter/settings.json` to `five_hours`, `one_day`,
-  `seven_days`, `thirty_days`, `all`, or `custom`.
+  `~/Library/Application Support/Codex Meter/settings.json` to `five_hours`,
+  `one_day`, `seven_days`, `thirty_days`, `all`, or `custom`.
 - Missing or invalid settings fall back to the repo default, `seven_days`.
 - The view dropdown reflects the open graph view. It starts from the configured
   default and changes only when you choose another view.
@@ -167,27 +169,28 @@ state, limit IDs, window lengths, reset timestamps, and used percentages.
 ## Run Once
 
 ```sh
-python3 scripts/collect_codex_usage.py
+/opt/homebrew/opt/python@3.13/bin/python3.13 scripts/collect_codex_usage.py
 ```
 
 The command writes or updates the files under
-`~/Documents/Archives/Codex Meter/`.
+`~/Library/Application Support/Codex Meter/`.
 
 When the reset-credit count changes, Codex Meter also writes
-`~/Documents/Archives/Codex Meter/reset_credit_events.jsonl`.
+`~/Library/Application Support/Codex Meter/reset_credit_events.jsonl`.
 When the flexible credit balance changes, it writes
-`~/Documents/Archives/Codex Meter/flexible_credit_events.jsonl`.
+`~/Library/Application Support/Codex Meter/flexible_credit_events.jsonl`.
 
 ## Open The Graph
 
 ```sh
-open -a Safari "$HOME/Documents/Archives/Codex Meter/usage.html"
+open -a Safari "$HOME/Library/Application Support/Codex Meter/usage.html"
 ```
 
 Chrome works too:
 
 ```sh
-open -a "Google Chrome" "$HOME/Documents/Archives/Codex Meter/usage.html"
+open -a "Google Chrome" \
+  "$HOME/Library/Application Support/Codex Meter/usage.html"
 ```
 
 Hover directly over the plotted dots for the point details. The page reloads the
@@ -202,28 +205,34 @@ The installer writes and loads a LaunchAgent. With no arguments, it samples
 every 5 minutes:
 
 ```sh
-python3 scripts/install_launch_agent.py
+/opt/homebrew/opt/python@3.13/bin/python3.13 scripts/install_launch_agent.py
 ```
 
 To choose another sampling interval, pass a positive number and one unit:
 
 ```sh
-python3 scripts/install_launch_agent.py 30 seconds
-python3 scripts/install_launch_agent.py 15 minutes
-python3 scripts/install_launch_agent.py 1 hour
+/opt/homebrew/opt/python@3.13/bin/python3.13 \
+  scripts/install_launch_agent.py 30 seconds
+/opt/homebrew/opt/python@3.13/bin/python3.13 \
+  scripts/install_launch_agent.py 15 minutes
+/opt/homebrew/opt/python@3.13/bin/python3.13 \
+  scripts/install_launch_agent.py 1 hour
 ```
 
 Supported units are `seconds`, `minutes`, `hours`, and `days`.
-The LaunchAgent keeps one app-server session open between samples,
-instead of reinitializing Codex's local databases on every interval.
+The LaunchAgent keeps one app-server session and one parsed history in memory
+between samples instead of reinitializing Codex's local databases or rereading
+the complete JSONL file on every interval.
 After updating an existing installation, run the installer again to replace the
 older per-sample LaunchAgent with the persistent collector.
 
-If you used the old `codex-usage-tracker` name, the installer migrates existing
-snapshots from `~/Documents/Archives/Codex Usage Tracker/` into
-`~/Documents/Archives/Codex Meter/` before loading the new LaunchAgent.
-The historical archive directory is left in place after the new archive is
-written.
+The installer imports existing snapshots from
+`~/Documents/Archives/Codex Usage Tracker/` and
+`~/Documents/Archives/Codex Meter/` into the local Application Support
+directory before loading the LaunchAgent. The historical archive directories
+are left in place. If macOS has evicted an archive file to iCloud, download it
+before running the installer; migration stops rather than starting with an
+incomplete history.
 
 To stop it:
 

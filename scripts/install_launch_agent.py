@@ -15,7 +15,7 @@ import migrate_to_codex_meter
 LABEL = "com.codex-usage-tracker"
 ROOT = Path(__file__).resolve().parents[1]
 COLLECTOR = ROOT / "scripts" / "collect_codex_usage.py"
-OUTPUT_DIR = Path.home() / "Documents" / "Archives" / "Codex Meter"
+OUTPUT_DIR = migrate_to_codex_meter.NEW_DIR
 PLIST_PATH = Path.home() / "Library" / "LaunchAgents" / f"{LABEL}.plist"
 PYTHON_BIN = "/opt/homebrew/opt/python@3.13/bin/python3.13"
 DEFAULT_AMOUNT = 5
@@ -50,7 +50,7 @@ def parse_interval(arguments: list[str]) -> tuple[int, str]:
             raise SystemExit("amount must be a positive integer") from exc
     else:
         raise SystemExit(
-            "usage: python3 scripts/install_launch_agent.py [amount unit]"
+            f"usage: {PYTHON_BIN} scripts/install_launch_agent.py [amount unit]"
         )
 
     if amount < 1:
