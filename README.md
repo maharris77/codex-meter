@@ -160,7 +160,29 @@ state, limit IDs, window lengths, reset timestamps, and used percentages.
 python3 scripts/collect_codex_usage.py
 ```
 
-The command writes or updates the files under
+## Estimate Transcript Credits
+
+`estimate_transcript_credits.py` prices recorded token usage using the current
+Codex rate card. It reads model changes from `turn_context` events and reads
+Standard versus Fast from `thread_settings_applied.service_tier`. Turns without
+a supported model rate or recorded speed setting are shown as unpriced rather
+than guessed.
+
+```sh
+python3 scripts/estimate_transcript_credits.py \
+  --start 2026-08-22T00:00:00-04:00 \
+  --end 2026-08-23T00:00:00-04:00
+```
+
+The estimate derives usage from changes in each transcript's cumulative token
+counters, excludes unchanged snapshots, and uses `last_token_usage` when a
+cumulative counter starts or resets. It also excludes token events copied into
+forked subagent transcripts. The result is a current-rate-card equivalent, not
+a reconstruction of historical rate cards or unrecorded account activity.
+It does not include shared Codex or Work usage that has no local rollout
+transcript.
+
+The collector command writes or updates the files under
 `~/Documents/Archives/Codex Meter/`.
 
 When the reset-credit count changes, Codex Meter also writes
