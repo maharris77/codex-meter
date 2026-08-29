@@ -150,6 +150,11 @@ reset-credit graph.
   OpenAI analytics or billing history.
 - The local JSON files include plan type, usage percentages, credit state, and
   exact reset timestamps.
+- To avoid loading the desktop app's full thread database, the collector keeps
+  a private minimal Codex home at
+  `~/Library/Application Support/Codex Meter/codex-home/`. It contains a local
+  copy of the ChatGPT authentication used by the bundled app-server and is
+  restricted to the current macOS user.
 - Reset-credit alerts depend on the same app-server response. If Codex stops
   returning `rateLimitResetCredits.availableCount`, no alert is emitted.
 

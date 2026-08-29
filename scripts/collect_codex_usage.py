@@ -9,6 +9,7 @@ import copy
 import gzip
 import html
 import json
+import os
 import select
 import signal
 import subprocess
@@ -30,6 +31,8 @@ RESET_CREDIT_EVENTS_PATH = OUTPUT_DIR / "reset_credit_events.jsonl"
 HARD_RESET_EVENTS_PATH = OUTPUT_DIR / "hard_reset_events.jsonl"
 FLEXIBLE_CREDIT_EVENTS_PATH = OUTPUT_DIR / "flexible_credit_events.jsonl"
 SETTINGS_PATH = OUTPUT_DIR / "settings.json"
+METER_CODEX_HOME = OUTPUT_DIR / "codex-home"
+MAIN_CODEX_AUTH_PATH = Path.home() / ".codex" / "auth.json"
 APP_SERVER_INITIALIZE_TIMEOUT_SECONDS = 120
 RATE_LIMIT_READ_TIMEOUT_SECONDS = 30
 CODEX_BIN = "/Applications/ChatGPT.app/Contents/Resources/codex"
@@ -195,10 +198,70 @@ def read_response(
     )
 
 
+def auth_refresh_timestamp(path: Path) -> datetime | None:
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+    except (FileNotFoundError, json.JSONDecodeError, OSError):
+        return None
+    last_refresh = payload.get("last_refresh")
+    tokens = payload.get("tokens")
+    if (
+        not isinstance(last_refresh, str)
+        or not isinstance(tokens, dict)
+        or not isinstance(tokens.get("access_token"), str)
+        or not tokens["access_token"]
+    ):
+        return None
+    try:
+        return datetime.fromisoformat(last_refresh.replace("Z", "+00:00"))
+    except ValueError:
+        return None
+
+
+def prepare_meter_codex_home() -> Path:
+    """Create a small Codex home without the user's thread database."""
+    METER_CODEX_HOME.mkdir(mode=0o700, parents=True, exist_ok=True)
+    METER_CODEX_HOME.chmod(0o700)
+    meter_auth_path = METER_CODEX_HOME / "auth.json"
+    main_refresh = auth_refresh_timestamp(MAIN_CODEX_AUTH_PATH)
+    meter_refresh = auth_refresh_timestamp(meter_auth_path)
+
+    if main_refresh is not None and (
+        meter_refresh is None or main_refresh > meter_refresh
+    ):
+        temporary_path: Path | None = None
+        try:
+            with tempfile.NamedTemporaryFile(
+                mode="wb",
+                dir=METER_CODEX_HOME,
+                prefix=".auth.json.",
+                suffix=".tmp",
+                delete=False,
+            ) as handle:
+                temporary_path = Path(handle.name)
+                handle.write(MAIN_CODEX_AUTH_PATH.read_bytes())
+            temporary_path.chmod(0o600)
+            temporary_path.replace(meter_auth_path)
+        finally:
+            if temporary_path is not None and temporary_path.exists():
+                temporary_path.unlink()
+
+    if auth_refresh_timestamp(meter_auth_path) is None:
+        raise RuntimeError(
+            "Codex Meter could not find valid ChatGPT authentication; "
+            "sign in to the ChatGPT desktop app"
+        )
+    meter_auth_path.chmod(0o600)
+    return METER_CODEX_HOME
+
+
 class CodexAppServerClient:
     """Keep one app-server process alive for repeated quota reads."""
 
     def __init__(self) -> None:
+        codex_home = prepare_meter_codex_home()
+        environment = os.environ.copy()
+        environment["CODEX_HOME"] = str(codex_home)
         self.process = subprocess.Popen(
             [CODEX_BIN, "app-server", "--listen", "stdio://"],
             stdin=subprocess.PIPE,
@@ -206,6 +269,7 @@ class CodexAppServerClient:
             stderr=subprocess.STDOUT,
             text=True,
             bufsize=1,
+            env=environment,
         )
         self.tail: deque[str] = deque(maxlen=10)
         self.next_request_id = 1

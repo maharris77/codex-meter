@@ -367,6 +367,11 @@ class CodexAppServerClientTests(unittest.TestCase):
 
         with (
             mock.patch.object(
+                meter,
+                "prepare_meter_codex_home",
+                return_value=Path("/tmp/codex-meter-test-home"),
+            ),
+            mock.patch.object(
                 meter.subprocess,
                 "Popen",
                 return_value=process,
@@ -383,6 +388,10 @@ class CodexAppServerClientTests(unittest.TestCase):
 
         popen.assert_called_once()
         self.assertEqual(
+            popen.call_args.kwargs["env"]["CODEX_HOME"],
+            "/tmp/codex-meter-test-home",
+        )
+        self.assertEqual(
             [line.get("method") for line in request_lines],
             [
                 "initialize",
@@ -395,6 +404,40 @@ class CodexAppServerClientTests(unittest.TestCase):
             [line.get("id") for line in request_lines if "id" in line],
             [1, 2, 3],
         )
+
+    def test_prepare_meter_codex_home_copies_newer_main_auth(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            main_auth_path = root / "main-auth.json"
+            meter_home = root / "meter-home"
+            main_auth_path.write_text(
+                json.dumps(
+                    {
+                        "auth_mode": "chatgpt",
+                        "last_refresh": "2026-08-28T20:00:00Z",
+                        "tokens": {"access_token": "secret"},
+                    }
+                ),
+                encoding="utf-8",
+            )
+
+            with (
+                mock.patch.object(
+                    meter, "MAIN_CODEX_AUTH_PATH", main_auth_path
+                ),
+                mock.patch.object(meter, "METER_CODEX_HOME", meter_home),
+            ):
+                self.assertEqual(meter.prepare_meter_codex_home(), meter_home)
+
+            copied_auth = json.loads(
+                (meter_home / "auth.json").read_text(encoding="utf-8")
+            )
+            self.assertEqual(copied_auth["tokens"]["access_token"], "secret")
+            self.assertEqual(
+                (meter_home / "auth.json").stat().st_mode & 0o777,
+                0o600,
+            )
+            self.assertEqual(meter_home.stat().st_mode & 0o777, 0o700)
 
 
 class SvgSerializationTests(unittest.TestCase):
