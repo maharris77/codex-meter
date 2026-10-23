@@ -228,6 +228,32 @@ class CodexAppServerClientTests(unittest.TestCase):
         )
 
 
+class HtmlReloadStatusTests(unittest.TestCase):
+    def test_reload_badge_does_not_claim_new_sample_or_successful_load(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            target = Path(temporary_directory) / "usage.html"
+            with (
+                mock.patch.object(meter, "HTML_PATH", target),
+                mock.patch.object(
+                    meter, "load_default_view_preset", return_value="seven_days"
+                ),
+            ):
+                meter.render_html()
+
+            html = target.read_text(encoding="utf-8")
+
+        self.assertIn('<div id="reload-status"></div>', html)
+        self.assertIn('document.getElementById("reload-status")', html)
+        self.assertIn(
+            'status.textContent = `View reload requested ${new Date().toLocaleString()}`;',
+            html,
+        )
+        self.assertIn('Sample time: see “Last collected” in graph.', html)
+        self.assertNotIn('Refreshed ', html)
+        self.assertIn('graphFrame.src = graphUrl();', html)
+        self.assertIn('window.setInterval(refreshGraph, refreshSeconds * 1000);', html)
+
+
 class SvgSerializationTests(unittest.TestCase):
     def test_embedded_data_is_compressed_and_round_trips(self) -> None:
         data = "a" * 100_000 + "]]><tag>&value" + "b" * 100_000
@@ -302,6 +328,10 @@ class SvgSerializationTests(unittest.TestCase):
             )
 
             self.assertLess(target.stat().st_size, meter.SVG_BROWSER_BYTE_LIMIT)
+            self.assertIn(
+                f"Last collected {meter.format_epoch_local(1_030)}",
+                "".join(root.itertext()),
+            )
             self.assertEqual(data["last"], 1_030)
             self.assertTrue(data["series"])
 

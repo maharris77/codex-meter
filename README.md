@@ -186,6 +186,13 @@ output without a manual refresh. The configured default view is used when the
 HTML file first opens; timed refreshes keep the current graph view selected in
 the dropdown.
 
+The browser badge says `View reload requested` with the browser's local time.
+This reports only a request to reload the view, not a successful load or a new
+sample. For the displayed graph's latest sample time, read `Last collected` in
+the graph header. That timestamp can stay unchanged if collection or rendering
+stops, even while the browser continues requesting reloads. A failed reload may
+leave the graph unavailable; the badge does not detect or report load success.
+
 ## Run On Startup
 
 The installer writes and loads a LaunchAgent. With no arguments, it samples

@@ -2792,13 +2792,16 @@ def render_html() -> None:
 </head>
 <body>
   <iframe id="graph-frame" src="usage.svg" title="Codex and Work usage graph"></iframe>
-  <div id="status"></div>
+  <div id="status">
+    <div id="reload-status"></div>
+    <div>Sample time: see “Last collected” in graph.</div>
+  </div>
   <script>
     const refreshSeconds = {HTML_REFRESH_SECONDS};
     const validViewPresets = new Set({view_presets_json});
     const defaultViewPreset = {default_view_preset_json};
     const graphFrame = document.getElementById("graph-frame");
-    const status = document.getElementById("status");
+    const status = document.getElementById("reload-status");
     const customDurationKey = "codex-meter.customRangeDuration";
     const customLockKey = "codex-meter.customRangeLocked";
     const customStartKey = "codex-meter.customRangeStart";
@@ -3017,7 +3020,7 @@ def render_html() -> None:
 
     function refreshGraph() {{
       graphFrame.src = graphUrl();
-      status.textContent = `Refreshed ${{new Date().toLocaleString()}}`;
+      status.textContent = `View reload requested ${{new Date().toLocaleString()}}`;
     }}
 
     refreshGraph();
