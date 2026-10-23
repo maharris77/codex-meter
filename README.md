@@ -209,6 +209,13 @@ instead of reinitializing Codex's local databases on every interval.
 After updating an existing installation, run the installer again to replace the
 older per-sample LaunchAgent with the persistent collector.
 
+In continuous mode, a failed history read or graph refresh is reported to
+standard error after the current snapshot has been saved. Collection continues
+on the same app-server session and retries the graph on the next sample; the
+graph may remain stale in the meantime. Collection and snapshot/event
+persistence errors still stop the process. Run-once mode still exits with an
+error if the graph cannot be refreshed, even when the snapshot was saved.
+
 If you used the old `codex-usage-tracker` name, the installer migrates existing
 snapshots from `~/Documents/Archives/Codex Usage Tracker/` into
 `~/Documents/Archives/Codex Meter/` before loading the new LaunchAgent.
@@ -235,6 +242,18 @@ client name, and output archive use the Codex Meter name.
 - `docs/research.md`: notes on the data source and related projects.
 - `docs/roadmap.md`: planned dashboard, telemetry, and optional module work.
 
+## Tests
+
+Run the Python regression suite without starting the app-server:
+
+```sh
+python3 -m unittest discover -s tests -v
+```
+
+The failure-boundary tests use a mocked client and temporary archive files;
+they do not verify a live macOS app-server or LaunchAgent installation.
+
 ## License
 
 MIT
+

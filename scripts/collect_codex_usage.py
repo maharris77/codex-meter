@@ -32,7 +32,7 @@ SETTINGS_PATH = OUTPUT_DIR / "settings.json"
 APP_SERVER_INITIALIZE_TIMEOUT_SECONDS = 120
 RATE_LIMIT_READ_TIMEOUT_SECONDS = 30
 CODEX_BIN = "/Applications/ChatGPT.app/Contents/Resources/codex"
-PROJECT_VERSION = "0.7.0"
+PROJECT_VERSION = "0.7.1"
 RESET_TIME_TOLERANCE_SECONDS = 10 * 60
 RESET_TIMESTAMP_JITTER_SECONDS = 15
 EARLY_RESET_CONFIRMING_SAMPLES = 2
@@ -3059,6 +3059,10 @@ def summary_lines(result: dict[str, Any]) -> list[str]:
     return lines
 
 
+class PresentationError(RuntimeError):
+    """A snapshot was saved, but its graph could not be refreshed."""
+
+
 def collect_and_render(client: CodexAppServerClient) -> dict[str, Any]:
     previous_snapshot = load_latest_snapshot()
     result = client.read_rate_limits()
@@ -3066,8 +3070,13 @@ def collect_and_render(client: CodexAppServerClient) -> dict[str, Any]:
     append_snapshot(snapshot)
     alert_if_reset_credit_count_changed(previous_snapshot, snapshot)
     record_if_flexible_credit_changed(previous_snapshot, snapshot)
-    render_svg(load_snapshots())
-    render_html()
+    try:
+        render_svg(load_snapshots())
+        render_html()
+    except Exception as exc:
+        raise PresentationError(
+            f"Snapshot saved; graph refresh failed: {type(exc).__name__}: {exc}"
+        ) from exc
     return result
 
 
@@ -3107,7 +3116,10 @@ def main() -> None:
         else:
             while True:
                 cycle_started = time.monotonic()
-                collect_and_render(client)
+                try:
+                    collect_and_render(client)
+                except PresentationError as exc:
+                    print(f"{exc}; continuing collection", file=sys.stderr, flush=True)
                 elapsed = time.monotonic() - cycle_started
                 delay = arguments.interval_seconds - elapsed
                 time.sleep(delay if delay > 0 else arguments.interval_seconds)
@@ -3123,3 +3135,4 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
+
