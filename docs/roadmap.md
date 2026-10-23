@@ -162,6 +162,16 @@ model and dashboard behaviors are stable.
 
 ## Exploration Queue
 
+### Raw Versus Validated Quota For Coordination
+
+The archive and `latest.json` contain raw app-server observations, while the
+graph applies `validated_usage_snapshots` to hold transient placeholder quota
+windows. External quota-aware coordination must not assume those two views
+are interchangeable. Decide and test an explicit consumer contract, including
+freshness and unconfirmed reset handling, before using either view for control.
+The 0.7.1 presentation-failure isolation does not change raw storage, validation,
+or scheduling policy; this remains separate follow-up work.
+
 ### Pause And Resume Controls
 
 Question: can ThreadMonitor safely pause or resume exactly the intended Codex
@@ -236,3 +246,4 @@ Promotion gate:
   say so plainly.
 - Public roadmap items should describe user value; `docs/research.md` should
   hold lower-level evidence and rejected paths.
+
